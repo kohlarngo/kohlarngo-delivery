@@ -64,4 +64,6 @@ Supabase SQL Editor > New query > วางทั้งไฟล์ `migration_a
 - ต้องเปิด "Allow anonymous sign-ins" ไม่งั้นแอปลูกค้าจะใช้งานไม่ได้เลย (ดูขั้นตอนที่ 2)
 - Google/Facebook login ต้องตั้งค่า OAuth app ของตัวเองก่อนถึงจะใช้ได้ (ไม่ใช่ปุ่มที่ใช้ได้ทันทีแบบไม่ต้องตั้งค่า)
 #   k o h l a r n g o - d e l i v e r y  
+ #   k o h l a r n g o - d e l i v e r y  
+ #   k o h l a r n g o - d e l i v e r y  
  
