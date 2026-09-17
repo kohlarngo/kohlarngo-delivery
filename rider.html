@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แอปไรเดอร์ — อิ่มด่วน (GPS Tracking Enabled)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#FBF3E7; --surface:#FFFFFF; --surface-2:#FFF9F0; --text:#241B15; --text-muted:#7A6A57;
+    --primary:#1F7A4D; --primary-ink:#FFFFFF; --accent:#DD3B1F; --secondary:#F2A93B;
+    --border:#E4DDC8; --shadow:0 1px 2px rgba(36,27,21,.06); --radius-s:8px; --radius-m:14px; --radius-l:22px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){ --bg:#101613; --surface:#1B2320; --surface-2:#212A26; --text:#EDF3EE; --text-muted:#A9BBB0; --primary:#3DDC84; --primary-ink:#101613; --accent:#FF6A3D; --secondary:#FFC94D; --border:#2C3733; color-scheme: dark; }
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans Thai',sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:80px;}
+  h1,h2,h3{font-family:'Archivo Black','Noto Sans Thai',sans-serif;font-weight:400;margin:0;letter-spacing:-0.01em;}
+  button{font-family:inherit;cursor:pointer;}
+
+  .wrap{max-width:460px;margin:0 auto;position:relative;min-height:100vh;background:var(--bg);}
+  @media (min-width:700px){ .wrap{max-width:520px;box-shadow:0 0 60px rgba(0,0,0,.08);} }
+
+  .topbar{display:flex;align-items:center;gap:10px;padding:18px 18px 12px;}
+  .avatar{width:42px;height:42px;border-radius:50%;background:var(--secondary);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .who .name{font-size:14px;font-weight:800;}
+  .who .plate{font-size:11px;color:var(--text-muted);}
+  .online-box{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);padding:6px 6px 6px 12px;border-radius:999px;box-shadow:var(--shadow);}
+  .online-label{font-size:12px;font-weight:700;}
+  .switch{width:38px;height:22px;border-radius:999px;background:var(--border);position:relative;flex-shrink:0;border:none;}
+  .switch.on{background:var(--primary);}
+  .switch::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.25);}
+  .switch.on::after{transform:translateX(16px);}
+
+  .earn-strip{margin:4px 18px 16px;background:linear-gradient(135deg,var(--primary),#2fae72 130%);color:#fff;border-radius:var(--radius-l);padding:18px 20px;display:flex;justify-content:space-between;align-items:center;}
+  .earn-strip .big{font-family:'Archivo Black';font-size:24px;}
+  .earn-strip .lbl{font-size:11.5px;opacity:.85;margin-top:2px;}
+  .earn-strip .trips{text-align:right;font-size:12px;opacity:.9;}
+
+  .section-title{padding:0 18px;margin:18px 0 10px;display:flex;justify-content:space-between;align-items:baseline;}
+  .section-title h2{font-size:16px;}
+  .section-title span{font-size:11.5px;color:var(--text-muted);}
+
+  .job-card{margin:0 18px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:14px;}
+  .job-top{display:flex;justify-content:space-between;align-items:center;}
+  .job-restaurant{font-size:14px;font-weight:800;}
+  .job-fee{font-size:15px;font-weight:800;color:var(--primary);}
+  .job-route{font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.7;}
+  .job-route .dotline{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-muted);margin-right:6px;}
+  .job-meta{display:flex;gap:12px;font-size:11.5px;color:var(--text-muted);margin-top:8px;}
+  .btn-accept{margin-top:12px;width:100%;background:var(--primary);color:var(--primary-ink);border:none;padding:11px;border-radius:999px;font-weight:800;font-size:13.5px;}
+
+  .gps-box {
+    margin: 10px 18px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .gps-status { font-size: 12px; font-weight: 700; color: var(--primary); }
+
+  .empty-state{text-align:center;padding:60px 30px;color:var(--text-muted);}
+  .empty-state .e{font-size:44px;margin-bottom:10px;}
+  .empty-state h3{font-size:15px;color:var(--text);margin-bottom:6px;}
+
+  .job-active-card{margin:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-l);padding:20px;text-align:center;}
+  .job-active-emoji{font-size:48px;}
+  .job-active-status{font-size:17px;font-weight:800;font-family:'Archivo Black';margin-top:8px;}
+  .job-active-sub{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
+  .route-card{margin:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:16px;}
+  .route-step{display:flex;gap:10px;align-items:flex-start;padding:6px 0;}
+  .route-dot{width:10px;height:10px;border-radius:50%;background:var(--border);margin-top:4px;flex-shrink:0;}
+  .route-step.done .route-dot{background:var(--primary);}
+  .route-line{width:2px;background:var(--border);margin-left:4px;height:20px;}
+  .btn-big{margin:14px 18px 0;display:block;width:calc(100% - 36px);background:var(--primary);color:var(--primary-ink);border:none;padding:14px;border-radius:999px;font-weight:800;font-size:14.5px;}
+
+  .bottom-nav{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:460px;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:50;}
+  @media (min-width:700px){ .bottom-nav{max-width:520px;} }
+  .nav-btn{flex:1;border:none;background:none;padding:10px 4px 12px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--text-muted);font-size:10px;font-weight:600;}
+  .nav-btn.active{color:var(--primary);}
+
+  .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;font-weight:600;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* Supabase Configuration */
+const SUPABASE_URL = 'https://onvrqsyoykopwjunvrhr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v2MCVFaUm-1s6xD6og_eKg_S1vBU4SF';
+let supabaseClient = null;
+try {
+  if (SUPABASE_KEY.indexOf('นำ_ANON_PUBLIC_KEY') === -1 && typeof window.supabase !== 'undefined') {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (err) { console.warn('Supabase Init Error:', err); }
+const dataSource = supabaseClient ? 'supabase' : 'mock';
+
+let state = {
+  view: 'loading',    // loading | auth | setup-profile | pending | jobs
+  authMode: 'login',   // login | signup
+  user: null,
+  riderId: null,
+  riderName: '',
+  riderPlate: '',
+  online: false,
+  availableJobs: [],
+  activeJob: null,
+  todayEarnings: 0,
+  todayTrips: 0,
+};
+let watchGpsId = null;
+let gpsActive = false;
+let ordersChannel = null;
+
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove('show'),1700);
+}
+
+/* ============ MOCK DATA (fallback เมื่อยังไม่เชื่อม Supabase) ============ */
+const RESTAURANTS_MOCK = ['ส้มตำแซ่บนัว','ก๋วยเตี๋ยวเรือป้าแดง','ครัวไทยแท้ ป้าอำนวย','ปังปิ้ง & ชานมไข่มุก','พิซซ่า อิตาเลียนโน'];
+const STREETS_MOCK = ['สุขุมวิท 24','ลาดพร้าว 71','พระราม 9','สาทรใต้','เอกมัย 10'];
+function mockJob(){
+  return {
+    id: 'J'+Math.floor(Math.random()*9000+1000), code: 'J'+Math.floor(Math.random()*9000+1000),
+    restaurant: RESTAURANTS_MOCK[Math.floor(Math.random()*RESTAURANTS_MOCK.length)], emoji: '🍽️',
+    fee: 45, dropoff: STREETS_MOCK[Math.floor(Math.random()*STREETS_MOCK.length)] + ' (โหมดตัวอย่าง)',
+  };
+}
+
+/* ============ AUTH / INIT ============ */
+async function init(){
+  if (dataSource === 'mock') {
+    state.riderName = 'เอกชัย ใจดี (ตัวอย่าง)'; state.riderPlate = 'กท 4521';
+    state.online = true; state.todayEarnings = 342; state.todayTrips = 6;
+    state.availableJobs = [mockJob(), mockJob()];
+    state.view = 'jobs';
+    render();
+    return;
+  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { state.view = 'auth'; state.authMode = 'login'; render(); return; }
+  state.user = session.user;
+  await afterLogin();
+}
+async function afterLogin(){
+  try {
+    const { data, error } = await supabaseClient.from('riders').select('*').eq('owner_id', state.user.id).maybeSingle();
+    if (error) throw error;
+    if (!data) { state.view = 'setup-profile'; render(); return; }
+    state.riderId = data.id; state.riderName = data.name; state.riderPlate = data.plate; state.online = data.status === 'online';
+    if (data.status === 'pending') { state.view = 'pending'; render(); return; }
+    await refreshAll();
+    state.view = 'jobs'; render();
+    subscribeOrders();
+  } catch (err) { console.error(err); showToast('โหลดข้อมูลไม่สำเร็จ'); }
+}
+async function doSignup(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) throw error;
+    if (!data.session) { showToast('สมัครสำเร็จ! กรุณายืนยันอีเมลที่ส่งไปให้ แล้วกลับมาเข้าสู่ระบบ'); state.authMode = 'login'; render(); return; }
+    state.user = data.user;
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('สมัครไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function doLogin(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    state.user = data.user;
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('เข้าสู่ระบบไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function doLogout(){
+  if (ordersChannel) { supabaseClient.removeChannel(ordersChannel); ordersChannel = null; }
+  if (gpsActive && watchGpsId !== null) { navigator.geolocation.clearWatch(watchGpsId); gpsActive = false; }
+  await supabaseClient.auth.signOut();
+  state = { view:'auth', authMode:'login', user:null, riderId:null, riderName:'', riderPlate:'', online:false, availableJobs:[], activeJob:null, todayEarnings:0, todayTrips:0 };
+  render();
+}
+async function submitProfile(){
+  const name = document.getElementById('sp-name').value.trim();
+  const plate = document.getElementById('sp-plate').value.trim();
+  if (!name || !plate) { showToast('กรอกชื่อและทะเบียนรถให้ครบ'); return; }
+  try {
+    const { error } = await supabaseClient.from('riders').insert({ name, plate, owner_id: state.user.id, status: 'pending' });
+    if (error) throw error;
+    showToast('บันทึกโปรไฟล์แล้ว กำลังรอแอดมินอนุมัติ');
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('บันทึกไม่สำเร็จ: ' + (err.message||'')); }
+}
+
+/* ============ DATA REFRESH (Supabase) ============ */
+async function refreshAll(){ await Promise.all([refreshAvailableJobs(), refreshActiveJob(), refreshTodayStats()]); }
+async function refreshAvailableJobs(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_code,delivery_fee,address,restaurants(name,emoji)')
+      .eq('status', 'ready').is('rider_id', null)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    state.availableJobs = (data||[]).map(o => ({
+      id: o.id, code: o.order_code, fee: o.delivery_fee, dropoff: o.address,
+      restaurant: o.restaurants ? o.restaurants.name : 'ร้านค้า', emoji: o.restaurants ? o.restaurants.emoji : '🍽️',
+    }));
+  } catch (err) { console.warn('refreshAvailableJobs failed', err); }
+}
+async function refreshActiveJob(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_code,status,delivery_fee,address,restaurants(name,emoji)')
+      .eq('rider_id', state.riderId)
+      .in('status', ['rider_assigned','at_restaurant','picked_up'])
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    if (!data) { state.activeJob = null; return; }
+    const stepMap = { rider_assigned: 0, at_restaurant: 1, picked_up: 2 };
+    state.activeJob = {
+      id: data.id, code: data.order_code, fee: data.delivery_fee, dropoff: data.address,
+      restaurant: data.restaurants ? data.restaurants.name : 'ร้านค้า', emoji: data.restaurants ? data.restaurants.emoji : '🍽️',
+      step: stepMap[data.status] ?? 0, dbStatus: data.status,
+    };
+  } catch (err) { console.warn('refreshActiveJob failed', err); }
+}
+async function refreshTodayStats(){
+  try {
+    const start = new Date(); start.setHours(0,0,0,0);
+    const { data, error } = await supabaseClient
+      .from('orders').select('delivery_fee')
+      .eq('rider_id', state.riderId).eq('status', 'delivered').gte('created_at', start.toISOString());
+    if (error) throw error;
+    state.todayTrips = (data||[]).length;
+    state.todayEarnings = (data||[]).reduce((s,o)=>s+Number(o.delivery_fee||0),0);
+  } catch (err) { console.warn('refreshTodayStats failed', err); }
+}
+function subscribeOrders(){
+  if (!supabaseClient || ordersChannel) return;
+  ordersChannel = supabaseClient
+    .channel('rider_orders_watch')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+      if (state.view !== 'jobs') return;
+      await refreshAll(); render();
+    })
+    .subscribe();
+}
+
+/* ============ ACTIONS ============ */
+async function toggleOnline(){
+  state.online = !state.online;
+  if (dataSource === 'supabase') {
+    try {
+      await supabaseClient.from('riders').update({ status: state.online ? 'online' : 'offline' }).eq('id', state.riderId);
+      if (state.online) await refreshAll();
+    } catch (err) { console.warn(err); }
+  }
+  render();
+}
+async function toggleGpsTracking() {
+  if (!gpsActive) {
+    if ("geolocation" in navigator) {
+      watchGpsId = navigator.geolocation.watchPosition(sendGpsToSupabase, handleGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+      gpsActive = true; showToast('📡 เปิดระบบส่งพิกัด GPS เรียบร้อย');
+    } else { alert("อุปกรณ์นี้ไม่รองรับ GPS"); }
+  } else {
+    if (watchGpsId !== null) navigator.geolocation.clearWatch(watchGpsId);
+    gpsActive = false; showToast('⏹️ ปิดการส่งพิกัด GPS');
+  }
+  render();
+}
+async function sendGpsToSupabase(position) {
+  if (!supabaseClient || !state.riderId) return;
+  const lat = position.coords.latitude, lng = position.coords.longitude;
+  const { error } = await supabaseClient.from('gps_locations').upsert({ rider_id: state.riderId, lat, lng, updated_at: new Date() });
+  if (error) console.error('GPS Update Error:', error);
+}
+function handleGpsError(err) { showToast('⚠️ ไม่สามารถเข้าถึง GPS กรุณากดอนุญาตสิทธิ์'); }
+
+async function acceptJob(id){
+  if (dataSource === 'mock') {
+    const j = state.availableJobs.find(x=>x.id===id);
+    if (!j) return;
+    state.activeJob = {...j, step:0};
+    state.availableJobs = state.availableJobs.filter(x=>x.id!==id);
+    if (!gpsActive) toggleGpsTracking();
+    render();
+    return;
+  }
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders').update({ rider_id: state.riderId, status: 'rider_assigned' })
+      .eq('id', id).is('rider_id', null).eq('status','ready').select();
+    if (error) throw error;
+    if (!data || data.length === 0) { showToast('งานนี้ถูกไรเดอร์คนอื่นรับไปแล้ว'); await refreshAvailableJobs(); render(); return; }
+    if (!gpsActive) toggleGpsTracking();
+    await refreshAll(); render();
+  } catch (err) { console.error(err); showToast('รับงานไม่สำเร็จ ลองใหม่อีกครั้ง'); }
+}
+async function advanceJob(){
+  if (!state.activeJob) return;
+  if (dataSource === 'mock') {
+    state.activeJob.step++;
+    if (state.activeJob.step >= 3){
+      state.todayEarnings += state.activeJob.fee; state.todayTrips++;
+      showToast('ส่งอาหารสำเร็จ! ได้รับ '+state.activeJob.fee+' บาท');
+      state.activeJob = null;
+    }
+    render();
+    return;
+  }
+  const NEXT = { rider_assigned: 'at_restaurant', at_restaurant: 'picked_up', picked_up: 'delivered' };
+  const next = NEXT[state.activeJob.dbStatus];
+  if (!next) return;
+  try {
+    const { error } = await supabaseClient.from('orders').update({ status: next }).eq('id', state.activeJob.id);
+    if (error) throw error;
+    if (next === 'delivered') showToast('ส่งอาหารสำเร็จ! ได้รับ '+state.activeJob.fee+' บาท');
+    await refreshAll(); render();
+  } catch (err) { console.error(err); showToast('อัปเดตสถานะไม่สำเร็จ'); }
+}
+
+/* ============ RENDER ============ */
+function authHtml(){
+  const isSignup = state.authMode === 'signup';
+  return `
+  <div class="job-active-card" style="margin-top:60px;">
+    <div class="job-active-emoji">🏍️</div>
+    <div class="job-active-status">${isSignup ? 'สมัครเป็นไรเดอร์ใหม่' : 'เข้าสู่ระบบไรเดอร์'}</div>
+    <div style="margin-top:16px;text-align:left;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">อีเมล</div>
+      <input id="auth-email" type="email" placeholder="rider@email.com" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin:12px 0 6px;">รหัสผ่าน</div>
+      <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+    </div>
+    <button class="btn-accept" style="margin-top:16px;" onclick="${isSignup ? 'doSignup()' : 'doLogin()'}">${isSignup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
+    <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--primary);" onclick="state.authMode='${isSignup ? 'login' : 'signup'}';render()">
+      ${isSignup ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครใหม่'}
+    </button>
+  </div>`;
+}
+function setupProfileHtml(){
+  return `
+  <div class="job-active-card" style="margin-top:60px;">
+    <div class="job-active-emoji">📝</div>
+    <div class="job-active-status">ตั้งค่าโปรไฟล์ไรเดอร์</div>
+    <div style="margin-top:16px;text-align:left;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">ชื่อ-นามสกุล</div>
+      <input id="sp-name" placeholder="เช่น เอกชัย ใจดี" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin:12px 0 6px;">ทะเบียนรถ</div>
+      <input id="sp-plate" placeholder="เช่น กท 4521" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+    </div>
+    <button class="btn-accept" style="margin-top:16px;" onclick="submitProfile()">บันทึกและส่งขออนุมัติ</button>
+    <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--red, #C0392B);" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+function pendingHtml(){
+  return `
+  <div class="job-active-card">
+    <div class="job-active-emoji">⏳</div>
+    <div class="job-active-status">รอการอนุมัติจากแอดมิน</div>
+    <div class="job-active-sub">บัญชีของคุณ (${state.riderName}) กำลังรอตรวจสอบ กรุณาลองใหม่ภายหลัง</div>
+    <button class="btn-accept" style="margin-top:16px;background:transparent;color:#C0392B;" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+function topbar(){
+  return `
+  <div class="topbar">
+    <div class="avatar">🏍️</div>
+    <div class="who"><div class="name">${state.riderName||'ไรเดอร์'}</div><div class="plate">${state.riderPlate||'-'} · <span style="text-decoration:underline;cursor:pointer;" onclick="doLogout()">ออกจากระบบ</span></div></div>
+    <div class="online-box"><span class="online-label">${state.online?'ออนไลน์':'ออฟไลน์'}</span><button class="switch ${state.online?'on':''}" onclick="toggleOnline()"></button></div>
+  </div>
+  <div class="earn-strip">
+    <div><div class="big">฿${state.todayEarnings.toLocaleString('th-TH')}</div><div class="lbl">รายได้วันนี้</div></div>
+    <div class="trips">${state.todayTrips} เที่ยว</div>
+  </div>`;
+}
+function renderJobs(){
+  if (state.activeJob) return renderActiveJob();
+  return `
+  <div class="gps-box">
+    <div><b>ส่งพิกัด GPS แบบ Realtime</b><br><span style="font-size:11px;color:var(--text-muted)">สถานะ: ${gpsActive?'กำลังส่งพิกัด...':'ปิดอยู่'}</span></div>
+    <button class="switch ${gpsActive?'on':''}" onclick="toggleGpsTracking()"></button>
+  </div>
+  ${!state.online ? `<div class="empty-state"><div class="e">🌙</div><h3>คุณออฟไลน์อยู่</h3><p>เปิดสวิตช์ออนไลน์ด้านบนเพื่อเริ่มรับงาน</p></div>` : `
+  <div class="section-title"><h2>งานที่พร้อมรับ</h2></div>
+  ${state.availableJobs.length === 0 ? `<div class="empty-state"><div class="e">🔍</div><h3>ยังไม่มีงานตอนนี้</h3><p>รอสักครู่ งานใหม่จะขึ้นที่นี่โดยอัตโนมัติ</p></div>` :
+  state.availableJobs.map(j => `
+    <div class="job-card">
+      <div class="job-top"><span class="job-restaurant">${j.emoji} ${j.restaurant}</span><span class="job-fee">+${j.fee} บาท</span></div>
+      <div class="job-route"><span class="dotline"></span>รับที่ — ${j.restaurant}<br><span class="dotline"></span>ส่งที่ — ${j.dropoff}</div>
+      <button class="btn-accept" onclick="acceptJob('${j.id}')">รับงานนี้</button>
+    </div>`).join('')}`}
+  `;
+}
+function renderActiveJob(){
+  const j = state.activeJob;
+  const STEP_LABELS = ['กำลังไปที่ร้าน', 'ถึงร้านแล้ว กำลังรอรับอาหาร', 'รับอาหารแล้ว กำลังไปส่ง'];
+  const STEP_BTN = ['ถึงร้านแล้ว', 'รับอาหารแล้ว ไปส่งลูกค้า', 'ส่งอาหารสำเร็จ'];
+  return `
+  <div class="job-active-card">
+    <div class="job-active-emoji">🏍️</div>
+    <div class="job-active-status">${STEP_LABELS[j.step]}</div>
+    <div class="job-active-sub">งาน #${j.code || j.id} · ${j.restaurant} · ส่งที่ ${j.dropoff}</div>
+  </div>
+  <div class="gps-box">
+    <span class="gps-status">${gpsActive ? '🟢 ส่งตำแหน่ง GPS ให้ลูกค้าแบบ Real-time' : '🔴 GPS ปิดอยู่'}</span>
+    <button class="btn-accept" style="margin:0;width:auto;padding:6px 12px;" onclick="toggleGpsTracking()">${gpsActive?'ปิด':'เปิด GPS'}</button>
+  </div>
+  <button class="btn-big" onclick="advanceJob()">${STEP_BTN[j.step]}</button>
+  `;
+}
+function render(){
+  let body = '';
+  if (state.view === 'loading') body = `<div class="empty-state"><div class="e">⏳</div><h3>กำลังโหลด...</h3></div>`;
+  else if (state.view === 'auth') body = authHtml();
+  else if (state.view === 'setup-profile') body = setupProfileHtml();
+  else if (state.view === 'pending') body = topbar() + pendingHtml();
+  else body = topbar() + renderJobs();
+  document.getElementById('app').innerHTML = body;
+}
+
+init();
+</script>
+</body>
+</html>

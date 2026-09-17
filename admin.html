@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel — อิ่มด่วน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F4F1EC; --surface:#FFFFFF; --surface-2:#F7F5F0; --text:#1D1B18; --text-muted:#726B60;
+    --primary:#2E4B3C; --primary-ink:#FFFFFF; --accent:#DD3B1F; --gold:#C99A3B; --green:#3F8C4A; --red:#C0392B;
+    --border:#E4E0D6; --shadow:0 1px 2px rgba(29,27,24,.06); --radius-s:8px; --radius-m:14px; --radius-l:22px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){ --bg:#14120F; --surface:#1E1B17; --surface-2:#252119; --text:#F1ECE3; --text-muted:#AFA593; --primary:#5FBE93; --primary-ink:#0E1512; --accent:#FF6A3D; --gold:#E3B65C; --green:#6FCB7A; --red:#E05B4E; --border:#332E27; color-scheme: dark; }
+  }
+  :root[data-theme="dark"]{ --bg:#14120F; --surface:#1E1B17; --surface-2:#252119; --text:#F1ECE3; --text-muted:#AFA593; --primary:#5FBE93; --primary-ink:#0E1512; --accent:#FF6A3D; --gold:#E3B65C; --green:#6FCB7A; --red:#E05B4E; --border:#332E27; color-scheme: dark; }
+
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans Thai',sans-serif;min-height:100vh;}
+  h1,h2,h3{font-family:'Archivo Black','Noto Sans Thai',sans-serif;font-weight:400;margin:0;letter-spacing:-0.01em;}
+  button{font-family:inherit;cursor:pointer;}
+
+  .shell{display:flex;min-height:100vh;}
+  .sidebar{width:236px;flex-shrink:0;background:var(--primary);color:var(--primary-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;transition:transform .25s ease;z-index:80;}
+  .sidebar-close{display:none;}
+  .hamburger-btn{display:none;border:none;background:var(--surface);width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);font-size:16px;align-items:center;justify-content:center;flex-shrink:0;color:var(--text);}
+  .sidebar-backdrop{display:none;}
+  @media (max-width:880px){
+    .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);box-shadow:0 0 40px rgba(0,0,0,.25);}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-close{display:flex;margin-left:auto;border:none;background:rgba(255,255,255,.14);width:28px;height:28px;border-radius:50%;align-items:center;justify-content:center;font-size:13px;color:#fff;}
+    :root[data-theme="dark"] .sidebar-close{ background:rgba(0,0,0,.14); color:#0E1512; }
+    .hamburger-btn{display:flex;}
+    .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:70;}
+    .sidebar-backdrop.show{display:block;}
+    .topbar{padding:16px 16px;}
+    .content{padding:16px 16px 60px;}
+  }
+  @media (max-width:520px){
+    .stats-row{grid-template-columns:1fr 1fr;gap:10px;}
+    .topbar h1{font-size:17px;}
+  }
+  .side-logo{display:flex;align-items:center;gap:9px;padding:22px 20px 18px;}
+  .logo-mark{width:32px;height:32px;border-radius:9px;background:var(--gold);color:#241B15;display:flex;align-items:center;justify-content:center;font-family:'Archivo Black';font-size:15px;flex-shrink:0;}
+  .logo-text{font-family:'Archivo Black';font-size:15px;}
+  .logo-sub{font-size:10px;opacity:.7;font-weight:600;}
+  .side-nav{padding:8px 12px;flex:1;display:flex;flex-direction:column;gap:2px;}
+  .side-link{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:600;color:rgba(255,255,255,.72);border:none;background:none;text-align:left;width:100%;}
+  :root[data-theme="dark"] .side-link{ color:rgba(0,0,0,.62); }
+  .side-link .ic{font-size:16px;width:18px;text-align:center;}
+  .side-link.active{background:rgba(255,255,255,.14);color:#fff;}
+  :root[data-theme="dark"] .side-link.active{ background:rgba(0,0,0,.14); color:#0E1512; }
+  .side-link .badge{margin-left:auto;background:var(--gold);color:#241B15;font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;}
+  .side-foot{padding:14px 18px;font-size:10.5px;opacity:.6;border-top:1px solid rgba(255,255,255,.12);}
+
+  .main{flex:1;min-width:0;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 28px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:10;}
+  .topbar h1{font-size:20px;}
+  .topbar .sub{font-size:12px;color:var(--text-muted);margin-top:3px;}
+  .content{padding:22px 28px 60px;}
+
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+  @media (max-width:920px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:16px;}
+  .stat-card .lbl{font-size:12px;color:var(--text-muted);font-weight:600;}
+  .stat-card .val{font-size:23px;font-family:'Archivo Black';margin-top:6px;}
+  .stat-card .delta{font-size:11.5px;margin-top:4px;font-weight:700;color:var(--green);}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);}
+  .panel-head h2{font-size:15px;}
+  .two-col{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
+  @media (max-width:920px){.two-col{grid-template-columns:1fr;}}
+
+  .chart-row{display:flex;align-items:flex-end;gap:10px;height:150px;padding:18px;}
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:6px;}
+  .bar{width:100%;max-width:30px;background:linear-gradient(180deg,var(--gold),var(--primary));border-radius:6px 6px 3px 3px;}
+  .bar-lbl{font-size:10.5px;color:var(--text-muted);}
+
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;padding:10px 18px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  td{padding:10px 18px;border-bottom:1px solid var(--border);font-size:12.8px;vertical-align:middle;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .name-cell{display:flex;align-items:center;gap:9px;}
+  .avatar-sm{width:30px;height:30px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+  .tag{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;display:inline-block;}
+  .tag.active{background:rgba(63,140,74,.15);color:var(--green);}
+  .tag.pending{background:rgba(201,154,59,.18);color:var(--gold);}
+  .tag.suspended{background:rgba(192,57,43,.14);color:var(--red);}
+  .tag.online{background:rgba(63,140,74,.15);color:var(--green);}
+  .tag.offline{background:var(--surface-2);color:var(--text-muted);}
+  .btn-mini{border:none;padding:6px 11px;border-radius:7px;font-size:11.5px;font-weight:700;margin-right:5px;}
+  .btn-mini.approve{background:var(--green);color:#fff;}
+  .btn-mini.suspend{background:rgba(192,57,43,.12);color:var(--red);}
+  .btn-mini.outline{background:var(--surface-2);border:1px solid var(--border);color:var(--text);}
+
+  .table-scroll{overflow-x:auto;}
+
+  .filter-row{display:flex;gap:8px;padding:14px 18px 0;}
+  .filt{border:1px solid var(--border);background:var(--surface-2);padding:7px 13px;border-radius:999px;font-size:12px;font-weight:700;color:var(--text-muted);}
+  .filt.active{background:var(--text);color:var(--bg);border-color:var(--text);}
+
+  .form-grid{padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:920px){.form-grid{grid-template-columns:1fr;}}
+  .f-group label{font-size:12px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;}
+  .f-group input{width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;}
+  .btn-primary{background:var(--primary);color:var(--primary-ink);border:none;padding:9px 16px;border-radius:999px;font-weight:700;font-size:12.5px;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;font-weight:600;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+/* Supabase Configuration (safe init) */
+const SUPABASE_URL = 'https://onvrqsyoykopwjunvrhr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v2MCVFaUm-1s6xD6og_eKg_S1vBU4SF';
+let supabaseClient = null;
+try {
+  if (SUPABASE_KEY.indexOf('นำ_ANON_PUBLIC_KEY') === -1 && typeof window.supabase !== 'undefined') {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (err) { console.warn('Supabase Init Error:', err); }
+const dataSource = supabaseClient ? 'supabase' : 'mock';
+
+let activePage = 'overview';
+let restFilter = 'all';
+let sidebarOpen = false;
+let loading = true;
+let realtimeChannel = null;
+let adminView = 'loading'; // loading | auth | denied | dashboard
+let currentAdminEmail = null;
+
+let gmvWeek = [];
+let restaurants = [];
+let riders = [];
+let users = [];
+let platformOrders = [];
+let commissionRate = 20;
+let minDeliveryFee = 15;
+let todayOrdersCount = 0;
+
+/* ============ MOCK DATA (fallback เมื่อยังไม่เชื่อม Supabase) ============ */
+const MOCK_GMV = [{d:'จ',v:82000},{d:'อ',v:91000},{d:'พ',v:87500},{d:'พฤ',v:104000},{d:'ศ',v:128000},{d:'ส',v:156000},{d:'อา',v:141000}];
+const MOCK_RESTAURANTS = [
+  {id:'r1', name:'ส้มตำแซ่บนัว', cat:'ส้มตำ/อีสาน', status:'active', rating:4.7, orders:1204, emoji:'🥗'},
+  {id:'r5', name:'พิซซ่า อิตาเลียนโน', cat:'พิซซ่า/พาสต้า', status:'suspended', rating:4.1, orders:210, emoji:'🍕'},
+  {id:'r6', name:'ครัวป้านิด ตามสั่ง', cat:'อาหารไทย', status:'pending', rating:0, orders:0, emoji:'🍳'},
+];
+const MOCK_RIDERS = [
+  {id:'d1', name:'เอกชัย ใจดี', status:'online', trips:1842, rating:4.9, todayTrips:6},
+  {id:'d5', name:'ปรีชา ใหม่ล่าสุด', status:'pending', trips:0, rating:0, todayTrips:0},
+];
+const MOCK_USERS = [{id:'u1', name:'สมชาย ใจงาม', joined:'ม.ค. 2025', orders:48, spent:8420}];
+const MOCK_ORDERS = [{id:'OD10231', rest:'ครัวไทยแท้ ป้าอำนวย', cust:'สมชาย ใจงาม', total:186, status:'delivered', date:'16 ก.ย. 14:22'}];
+
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove('show'),1700);
+}
+
+/* ============ AUTH / INIT ============ */
+async function init(){
+  if (dataSource === 'mock') {
+    gmvWeek = MOCK_GMV; restaurants = MOCK_RESTAURANTS; riders = MOCK_RIDERS; users = MOCK_USERS; platformOrders = MOCK_ORDERS;
+    loading = false; adminView = 'dashboard'; render(); return;
+  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { loading = false; adminView = 'auth'; render(); return; }
+  await checkAdminAndLoad(session.user);
+}
+async function checkAdminAndLoad(user){
+  try {
+    const { data, error } = await supabaseClient.from('admins').select('*').eq('id', user.id).maybeSingle();
+    if (error) throw error;
+    if (!data) { await supabaseClient.auth.signOut(); adminView = 'denied'; loading = false; render(); return; }
+    currentAdminEmail = user.email;
+    await refreshAll();
+    loading = false; adminView = 'dashboard'; render();
+    subscribeRealtime();
+  } catch (err) {
+    console.error(err); loading = false; adminView = 'auth'; render();
+    showToast('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง');
+  }
+}
+async function doAdminLogin(){
+  const email = document.getElementById('admin-email').value.trim();
+  const password = document.getElementById('admin-password').value;
+  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    loading = true; render();
+    await checkAdminAndLoad(data.user);
+  } catch (err) { console.error(err); showToast('เข้าสู่ระบบไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function doAdminLogout(){
+  if (realtimeChannel) { supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+  await supabaseClient.auth.signOut();
+  adminView = 'auth'; currentAdminEmail = null;
+  render();
+}
+function authHtml(){
+  return `
+  <div style="max-width:380px;margin:80px auto;padding:0 20px;">
+    <div class="panel">
+      <div class="panel-head"><h2>เข้าสู่ระบบแอดมิน</h2></div>
+      <div class="form-grid" style="grid-template-columns:1fr;">
+        <div class="f-group"><label>อีเมล</label><input id="admin-email" type="email" placeholder="admin@imduan.co.th"></div>
+        <div class="f-group"><label>รหัสผ่าน</label><input id="admin-password" type="password" placeholder="รหัสผ่าน"></div>
+      </div>
+      <div style="padding:0 18px 18px"><button class="btn-primary" onclick="doAdminLogin()" style="width:100%;">เข้าสู่ระบบ</button></div>
+    </div>
+    <p style="font-size:11.5px;color:var(--text-muted);text-align:center;margin-top:14px;">บัญชีแอดมินต้องถูกเพิ่มไว้ล่วงหน้าในฐานข้อมูล (ตาราง admins) เท่านั้น ดูวิธีใน migration_auth.sql</p>
+  </div>`;
+}
+function deniedHtml(){
+  return `
+  <div style="max-width:380px;margin:80px auto;padding:0 20px;text-align:center;">
+    <div style="font-size:44px;">🚫</div>
+    <h2 style="font-size:17px;margin-top:10px;">บัญชีนี้ไม่มีสิทธิ์แอดมิน</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">ติดต่อผู้ดูแลระบบเพื่อเพิ่มบัญชีนี้ในตาราง admins</p>
+    <button class="btn-primary" style="margin-top:14px;" onclick="adminView='auth';render()">กลับไปเข้าสู่ระบบ</button>
+  </div>`;
+}
+async function refreshAll(){
+  await Promise.all([refreshRestaurants(), refreshRiders(), refreshUsers(), refreshOrders(), refreshSettings(), refreshTodayOrdersCount()]);
+  await computeGmvWeekFromDb();
+}
+
+async function refreshRestaurants(){
+  try {
+    const { data, error } = await supabaseClient.from('restaurants').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    const { data: ord } = await supabaseClient.from('orders').select('restaurant_id').eq('status','delivered');
+    const counts = {}; (ord||[]).forEach(o=>{ if (o.restaurant_id) counts[o.restaurant_id]=(counts[o.restaurant_id]||0)+1; });
+    restaurants = (data||[]).map(r => ({ id:r.id, name:r.name, cat:r.category||'-', status:r.status, rating:r.rating||0, orders:counts[r.id]||0, emoji:r.emoji||'🍽️' }));
+  } catch (err) { console.warn('refreshRestaurants failed', err); }
+}
+async function refreshRiders(){
+  try {
+    const { data, error } = await supabaseClient.from('riders').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    riders = (data||[]).map(r => ({ id:r.id, name:r.name, status:r.status, trips:r.total_trips||0, rating:r.rating||0, todayTrips:0 }));
+    const start = new Date(); start.setHours(0,0,0,0);
+    const { data: ord } = await supabaseClient.from('orders').select('rider_id').eq('status','delivered').gte('created_at', start.toISOString());
+    const counts = {}; (ord||[]).forEach(o=>{ if (o.rider_id) counts[o.rider_id]=(counts[o.rider_id]||0)+1; });
+    riders.forEach(r => r.todayTrips = counts[r.id]||0);
+  } catch (err) { console.warn('refreshRiders failed', err); }
+}
+async function refreshUsers(){
+  try {
+    const { data, error } = await supabaseClient.from('customers').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    const { data: ord } = await supabaseClient.from('orders').select('customer_id,total').eq('status','delivered');
+    const agg = {}; (ord||[]).forEach(o=>{ if (!o.customer_id) return; if (!agg[o.customer_id]) agg[o.customer_id]={orders:0,spent:0}; agg[o.customer_id].orders++; agg[o.customer_id].spent+=Number(o.total||0); });
+    users = (data||[]).map(u => ({
+      id:u.id, name:u.name||'ลูกค้าอิ่มด่วน',
+      joined:new Date(u.created_at).toLocaleDateString('th-TH',{month:'short',year:'numeric'}),
+      orders:(agg[u.id]?agg[u.id].orders:0), spent:(agg[u.id]?agg[u.id].spent:0),
+    }));
+  } catch (err) { console.warn('refreshUsers failed', err); }
+}
+async function refreshOrders(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_code,status,total,created_at,restaurants(name),customers(name)')
+      .order('created_at', { ascending: false }).limit(60);
+    if (error) throw error;
+    platformOrders = (data||[]).map(o => ({
+      id:o.order_code, rawId:o.id, rest:o.restaurants?o.restaurants.name:'-', cust:o.customers?o.customers.name:'-',
+      total:o.total, status:mapDbStatusToAdmin(o.status), date:new Date(o.created_at).toLocaleString('th-TH'),
+    }));
+  } catch (err) { console.warn('refreshOrders failed', err); }
+}
+function mapDbStatusToAdmin(s){
+  if (s==='delivered') return 'delivered';
+  if (s==='cancelled') return 'cancelled';
+  if (s==='pending' || s==='preparing') return 'preparing';
+  return 'on_the_way';
+}
+async function refreshSettings(){
+  try {
+    const { data, error } = await supabaseClient.from('platform_settings').select('*');
+    if (error) throw error;
+    (data||[]).forEach(s => { if (s.key==='commission_rate') commissionRate = Number(s.value); if (s.key==='min_delivery_fee') minDeliveryFee = Number(s.value); });
+  } catch (err) { console.warn('refreshSettings failed', err); }
+}
+async function refreshTodayOrdersCount(){
+  try {
+    const start = new Date(); start.setHours(0,0,0,0);
+    const { count, error } = await supabaseClient.from('orders').select('id', { count:'exact', head:true }).gte('created_at', start.toISOString());
+    if (error) throw error;
+    todayOrdersCount = count||0;
+  } catch (err) { console.warn('refreshTodayOrdersCount failed', err); }
+}
+async function computeGmvWeekFromDb(){
+  try {
+    const start = new Date(); start.setDate(start.getDate()-6); start.setHours(0,0,0,0);
+    const { data, error } = await supabaseClient.from('orders').select('total,created_at').eq('status','delivered').gte('created_at', start.toISOString());
+    if (error) throw error;
+    const labels = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+    const buckets = {};
+    for (let i=6;i>=0;i--){ const d = new Date(); d.setDate(d.getDate()-i); d.setHours(0,0,0,0); buckets[d.toISOString().slice(0,10)] = { d: labels[d.getDay()], v: 0 }; }
+    (data||[]).forEach(o => { const key = new Date(o.created_at).toISOString().slice(0,10); if (buckets[key]) buckets[key].v += Number(o.total||0); });
+    gmvWeek = Object.values(buckets);
+  } catch (err) { console.warn('computeGmvWeekFromDb failed', err); gmvWeek = MOCK_GMV; }
+}
+function subscribeRealtime(){
+  if (!supabaseClient || realtimeChannel) return;
+  realtimeChannel = supabaseClient.channel('admin_watch')
+    .on('postgres_changes', { event:'*', schema:'public', table:'orders' }, async () => { await refreshOrders(); await computeGmvWeekFromDb(); await refreshRiders(); await refreshTodayOrdersCount(); render(); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'restaurants' }, async () => { await refreshRestaurants(); render(); })
+    .on('postgres_changes', { event:'*', schema:'public', table:'riders' }, async () => { await refreshRiders(); render(); })
+    .subscribe();
+}
+
+/* ============ NAV ============ */
+const PAGES = [
+  {id:'overview', label:'ภาพรวมระบบ', icon:'📊'},
+  {id:'restaurants', label:'ร้านค้า', icon:'🏪'},
+  {id:'riders', label:'ไรเดอร์', icon:'🏍️'},
+  {id:'users', label:'ผู้ใช้งาน', icon:'👥'},
+  {id:'orders', label:'คำสั่งซื้อ', icon:'🧾'},
+  {id:'finance', label:'การเงิน', icon:'💰'},
+];
+function setPage(p){ activePage=p; render(); }
+function demoBannerHtml(){
+  if (dataSource === 'supabase') return '';
+  return `<div style="margin:0 0 16px;background:var(--gold);color:#241B15;font-size:11.5px;font-weight:700;padding:9px 14px;border-radius:10px;">⚠️ ยังไม่เชื่อมฐานข้อมูลจริง (ใส่ Supabase anon key ในโค้ด) — แสดงข้อมูลตัวอย่างเท่านั้น</div>`;
+}
+
+function sidebarHtml(){
+  const pendingRest = restaurants.filter(r=>r.status==='pending').length;
+  const pendingRiders = riders.filter(r=>r.status==='pending').length;
+  return `
+  <div class="sidebar">
+    <div class="side-logo">
+      <div class="logo-mark">อ</div>
+      <div><div class="logo-text">อิ่มด่วน</div><div class="logo-sub">Admin Panel</div></div>
+      <button class="sidebar-close" onclick="closeSidebar()">✕</button>
+    </div>
+    <div class="side-nav">
+      ${PAGES.map(p=>{
+        let badge = '';
+        if (p.id==='restaurants' && pendingRest>0) badge = `<span class="badge">${pendingRest}</span>`;
+        if (p.id==='riders' && pendingRiders>0) badge = `<span class="badge">${pendingRiders}</span>`;
+        return `<button class="side-link ${activePage===p.id?'active':''}" onclick="setPage('${p.id}');closeSidebar()"><span class="ic">${p.icon}</span>${p.label}${badge}</button>`;
+      }).join('')}
+    </div>
+    <div class="side-foot">เข้าสู่ระบบในฐานะ Admin<br>${dataSource==='supabase' ? (currentAdminEmail||'-') : 'admin@imduan.co.th (ตัวอย่าง)'}${dataSource==='supabase' ? `<br><span style="text-decoration:underline;cursor:pointer;" onclick="doAdminLogout()">ออกจากระบบ</span>` : ''}</div>
+  </div>`;
+}
+function header(title, sub){
+  return `<div class="topbar"><button class="hamburger-btn" onclick="openSidebar()">☰</button><div><h1>${title}</h1><div class="sub">${sub}</div></div></div>`;
+}
+
+/* ============ OVERVIEW ============ */
+function renderOverview(){
+  const maxV = Math.max(1, ...gmvWeek.map(d=>d.v));
+  const gmvTotal = gmvWeek.reduce((s,d)=>s+d.v,0);
+  const activeRiders = riders.filter(r=>r.status==='online').length;
+  return `
+  ${header('ภาพรวมระบบ','สรุปข้อมูลทั้งแพลตฟอร์ม')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="stats-row">
+      <div class="stat-card"><div class="lbl">ร้านค้าทั้งหมด</div><div class="val">${restaurants.length}</div><div class="delta">▲ ${restaurants.filter(r=>r.status==='pending').length} รออนุมัติ</div></div>
+      <div class="stat-card"><div class="lbl">ไรเดอร์ออนไลน์</div><div class="val">${activeRiders}/${riders.length}</div><div class="delta">พร้อมรับงาน</div></div>
+      <div class="stat-card"><div class="lbl">ออเดอร์วันนี้</div><div class="val">${todayOrdersCount.toLocaleString('th-TH')}</div><div class="delta">${dataSource==='supabase'?'อัปเดตแบบเรียลไทม์':'▲ 9.4%'}</div></div>
+      <div class="stat-card"><div class="lbl">GMV 7 วันล่าสุด</div><div class="val">฿${(gmvTotal/1000).toFixed(0)}K</div><div class="delta">${dataSource==='supabase'?'จากออเดอร์ที่จัดส่งสำเร็จ':'▲ 14%'}</div></div>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-head"><h2>มูลค่าซื้อขายรวม (GMV) 7 วัน</h2></div>
+        <div class="chart-row">
+          ${gmvWeek.map(d=>`<div class="bar-col"><div style="font-size:9.5px;color:var(--text-muted);margin-bottom:4px">฿${(d.v/1000).toFixed(0)}K</div><div class="bar" style="height:${(d.v/maxV*100)}%"></div><div class="bar-lbl">${d.d}</div></div>`).join('')}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>ร้านค้ารอการอนุมัติ</h2></div>
+        <div>
+          ${restaurants.filter(r=>r.status==='pending').map(r=>`
+            <div style="display:flex;align-items:center;gap:9px;padding:10px 18px;border-bottom:1px solid var(--border)">
+              <div class="avatar-sm">${r.emoji}</div>
+              <div style="flex:1"><div style="font-size:12.5px;font-weight:700">${r.name}</div><div style="font-size:10.5px;color:var(--text-muted)">${r.cat}</div></div>
+              <button class="btn-mini approve" onclick="approveRest('${r.id}')">อนุมัติ</button>
+            </div>`).join('') || `<div style="padding:20px 18px;font-size:12.5px;color:var(--text-muted)">ไม่มีคำขอค้างอยู่</div>`}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ RESTAURANTS ============ */
+async function approveRest(id){
+  if (dataSource==='mock'){ const r=restaurants.find(x=>x.id===id); r.status='active'; showToast('อนุมัติร้าน '+r.name+' แล้ว'); render(); return; }
+  try { const { error } = await supabaseClient.from('restaurants').update({status:'active'}).eq('id',id); if (error) throw error; showToast('อนุมัติร้านแล้ว'); await refreshRestaurants(); render(); }
+  catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function suspendRest(id){
+  if (dataSource==='mock'){ const r=restaurants.find(x=>x.id===id); r.status='suspended'; showToast('ระงับร้าน '+r.name+'แล้ว'); render(); return; }
+  try { const { error } = await supabaseClient.from('restaurants').update({status:'suspended'}).eq('id',id); if (error) throw error; showToast('ระงับร้านแล้ว'); await refreshRestaurants(); render(); }
+  catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function reactivateRest(id){
+  if (dataSource==='mock'){ const r=restaurants.find(x=>x.id===id); r.status='active'; showToast('เปิดใช้งานร้าน '+r.name+' อีกครั้ง'); render(); return; }
+  try { const { error } = await supabaseClient.from('restaurants').update({status:'active'}).eq('id',id); if (error) throw error; showToast('เปิดใช้งานร้านแล้ว'); await refreshRestaurants(); render(); }
+  catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+const REST_FILTERS = [{id:'all',label:'ทั้งหมด'},{id:'active',label:'ใช้งานอยู่'},{id:'pending',label:'รออนุมัติ'},{id:'suspended',label:'ถูกระงับ'}];
+const REST_TAG_LABEL = {active:'ใช้งานอยู่', pending:'รออนุมัติ', suspended:'ถูกระงับ'};
+function renderRestaurants(){
+  const list = restFilter==='all' ? restaurants : restaurants.filter(r=>r.status===restFilter);
+  return `
+  ${header('ร้านค้า','จัดการร้านค้าที่เข้าร่วมแพลตฟอร์ม')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div class="filter-row">${REST_FILTERS.map(f=>`<button class="filt ${restFilter===f.id?'active':''}" onclick="restFilter='${f.id}';render()">${f.label}</button>`).join('')}</div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>ร้านค้า</th><th>หมวดหมู่</th><th>คะแนน</th><th>ออเดอร์สำเร็จ</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <tbody>
+          ${list.map(r=>`
+            <tr>
+              <td><div class="name-cell"><div class="avatar-sm">${r.emoji}</div><b>${r.name}</b></div></td>
+              <td>${r.cat}</td>
+              <td>${r.rating>0 ? '⭐ '+r.rating : '—'}</td>
+              <td>${r.orders.toLocaleString('th-TH')}</td>
+              <td><span class="tag ${r.status}">${REST_TAG_LABEL[r.status]}</span></td>
+              <td>
+                ${r.status==='pending' ? `<button class="btn-mini approve" onclick="approveRest('${r.id}')">อนุมัติ</button>` : ''}
+                ${r.status==='active' ? `<button class="btn-mini suspend" onclick="suspendRest('${r.id}')">ระงับ</button>` : ''}
+                ${r.status==='suspended' ? `<button class="btn-mini approve" onclick="reactivateRest('${r.id}')">เปิดใช้งาน</button>` : ''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ RIDERS ============ */
+async function approveRider(id){
+  if (dataSource==='mock'){ const r=riders.find(x=>x.id===id); r.status='offline'; showToast('อนุมัติไรเดอร์ '+r.name+' แล้ว'); render(); return; }
+  try { const { error } = await supabaseClient.from('riders').update({status:'offline'}).eq('id',id); if (error) throw error; showToast('อนุมัติไรเดอร์แล้ว'); await refreshRiders(); render(); }
+  catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function suspendRider(id){
+  if (dataSource==='mock'){ const r=riders.find(x=>x.id===id); r.status='pending'; showToast('ระงับไรเดอร์ '+r.name+' ชั่วคราว'); render(); return; }
+  try { const { error } = await supabaseClient.from('riders').update({status:'pending'}).eq('id',id); if (error) throw error; showToast('ระงับไรเดอร์แล้ว'); await refreshRiders(); render(); }
+  catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+const RIDER_TAG = {online:'ออนไลน์', offline:'ออฟไลน์', pending:'รออนุมัติ'};
+function renderRiders(){
+  return `
+  ${header('ไรเดอร์','จัดการไรเดอร์และคำขอสมัครใหม่')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>ไรเดอร์</th><th>สถานะ</th><th>คะแนน</th><th>เที่ยวสะสม</th><th>เที่ยววันนี้</th><th>จัดการ</th></tr></thead>
+        <tbody>
+          ${riders.map(r=>`
+            <tr>
+              <td><div class="name-cell"><div class="avatar-sm">🏍️</div><b>${r.name}</b></div></td>
+              <td><span class="tag ${r.status==='pending'?'pending':(r.status==='online'?'online':'offline')}">${RIDER_TAG[r.status]}</span></td>
+              <td>${r.rating>0 ? '⭐ '+r.rating : '—'}</td>
+              <td>${r.trips.toLocaleString('th-TH')}</td>
+              <td>${r.todayTrips}</td>
+              <td>
+                ${r.status==='pending' ? `<button class="btn-mini approve" onclick="approveRider('${r.id}')">อนุมัติ</button>` : `<button class="btn-mini outline" onclick="suspendRider('${r.id}')">ระงับ</button>`}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ USERS ============ */
+function renderUsers(){
+  return `
+  ${header('ผู้ใช้งาน','รายชื่อลูกค้าที่ลงทะเบียนในระบบ')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>ลูกค้า</th><th>สมัครเมื่อ</th><th>จำนวนออเดอร์สำเร็จ</th><th>ยอดใช้จ่ายสะสม</th></tr></thead>
+        <tbody>
+          ${users.map(u=>`
+            <tr>
+              <td><div class="name-cell"><div class="avatar-sm">👤</div><b>${u.name}</b></div></td>
+              <td>${u.joined}</td>
+              <td>${u.orders} ครั้ง</td>
+              <td>฿${u.spent.toLocaleString('th-TH')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ ORDERS ============ */
+const ORDER_STATUS_LABEL = {delivered:'จัดส่งสำเร็จ', on_the_way:'กำลังจัดส่ง', preparing:'กำลังปรุง/รอร้านรับ', cancelled:'ยกเลิก'};
+const ORDER_STATUS_TAG = {delivered:'active', on_the_way:'pending', preparing:'pending', cancelled:'suspended'};
+function renderOrders(){
+  return `
+  ${header('คำสั่งซื้อทั้งหมด','ตรวจสอบคำสั่งซื้อทั่วทั้งแพลตฟอร์ม')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>รหัสออเดอร์</th><th>ร้านค้า</th><th>ลูกค้า</th><th>ยอดรวม</th><th>สถานะ</th><th>เวลา</th></tr></thead>
+        <tbody>
+          ${platformOrders.map(o=>`
+            <tr>
+              <td><b>#${o.id}</b></td>
+              <td>${o.rest}</td>
+              <td>${o.cust}</td>
+              <td>฿${o.total}</td>
+              <td><span class="tag ${ORDER_STATUS_TAG[o.status]}">${ORDER_STATUS_LABEL[o.status]}</span></td>
+              <td style="color:var(--text-muted)">${o.date}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ FINANCE ============ */
+async function saveCommission(){
+  const v = document.getElementById('comm-rate').value;
+  const minFee = document.getElementById('min-fee').value;
+  if (dataSource==='supabase'){
+    try {
+      const { error } = await supabaseClient.from('platform_settings').upsert([
+        { key:'commission_rate', value:String(v) }, { key:'min_delivery_fee', value:String(minFee) },
+      ]);
+      if (error) throw error;
+      commissionRate = Number(v); minDeliveryFee = Number(minFee);
+      showToast('บันทึกอัตราค่าคอมมิชชั่น '+v+'% แล้ว');
+    } catch (err) { console.error(err); showToast('บันทึกไม่สำเร็จ'); }
+  } else {
+    showToast('บันทึกอัตราค่าคอมมิชชั่น '+v+'% แล้ว (โหมดตัวอย่าง ยังไม่บันทึกจริง)');
+  }
+}
+function renderFinance(){
+  const gmvTotal = gmvWeek.reduce((s,d)=>s+d.v,0);
+  const commission = Math.round(gmvTotal*(commissionRate/100));
+  return `
+  ${header('การเงิน','ค่าคอมมิชชั่นและสรุปรายรับแพลตฟอร์ม')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="stats-row">
+      <div class="stat-card"><div class="lbl">GMV 7 วันล่าสุด</div><div class="val">฿${gmvTotal.toLocaleString('th-TH')}</div></div>
+      <div class="stat-card"><div class="lbl">รายได้ค่าคอมมิชชั่น (${commissionRate}%)</div><div class="val">฿${commission.toLocaleString('th-TH')}</div></div>
+      <div class="stat-card"><div class="lbl">ยอดจ่ายไรเดอร์รอโอน</div><div class="val">฿18,420</div><div class="delta" style="color:var(--text-muted);font-weight:600;">ตัวอย่าง — ยังไม่มีระบบเดินบัญชีจริง</div></div>
+      <div class="stat-card"><div class="lbl">ยอดจ่ายร้านค้ารอโอน</div><div class="val">฿96,150</div><div class="delta" style="color:var(--text-muted);font-weight:600;">ตัวอย่าง — ยังไม่มีระบบเดินบัญชีจริง</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>ตั้งค่าอัตราค่าคอมมิชชั่น</h2></div>
+      <div class="form-grid">
+        <div class="f-group"><label>อัตราค่าคอมมิชชั่นร้านค้า (%)</label><input id="comm-rate" type="number" value="${commissionRate}"></div>
+        <div class="f-group"><label>ค่าธรรมเนียมจัดส่งขั้นต่ำ (บาท)</label><input id="min-fee" type="number" value="${minDeliveryFee}"></div>
+      </div>
+      <div style="padding:0 18px 18px"><button class="btn-primary" onclick="saveCommission()">บันทึกการตั้งค่า</button></div>
+    </div>
+  </div>`;
+}
+
+/* ============ MAIN RENDER ============ */
+function openSidebar(){ sidebarOpen = true; render(); }
+function closeSidebar(){ sidebarOpen = false; render(); }
+
+function render(){
+  const app = document.getElementById('app');
+  if (loading) { app.innerHTML = `<div style="padding:80px 30px;text-align:center;color:var(--text-muted);"><div style="font-size:44px;margin-bottom:10px;">⏳</div><h3>กำลังโหลดข้อมูล...</h3></div>`; return; }
+  if (adminView === 'auth') { app.innerHTML = authHtml(); return; }
+  if (adminView === 'denied') { app.innerHTML = deniedHtml(); return; }
+  let page = '';
+  if (activePage==='overview') page = renderOverview();
+  if (activePage==='restaurants') page = renderRestaurants();
+  if (activePage==='riders') page = renderRiders();
+  if (activePage==='users') page = renderUsers();
+  if (activePage==='orders') page = renderOrders();
+  if (activePage==='finance') page = renderFinance();
+  const sbHtml = sidebarHtml().replace('class="sidebar"', `class="sidebar${sidebarOpen?' open':''}"`);
+  app.innerHTML = `
+    <div class="shell">
+      <div class="sidebar-backdrop ${sidebarOpen?'show':''}" onclick="closeSidebar()"></div>
+      ${sbHtml}
+      <div class="main">${page}</div>
+    </div>`;
+}
+init();
+</script>
+</body>
+</html>

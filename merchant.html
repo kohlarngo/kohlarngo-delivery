@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แอปร้านค้า — อิ่มด่วน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#EEF3F6; --surface:#FFFFFF; --surface-2:#F5F8FA; --text:#171E24; --text-muted:#66747E;
+    --primary:#2A6F97; --primary-ink:#FFFFFF; --accent:#DD3B1F; --secondary:#F2A93B; --green:#1F7A4D; --red:#C0392B;
+    --border:#DEE6EB; --shadow:0 1px 2px rgba(23,30,36,.06); --radius-s:8px; --radius-m:14px; --radius-l:22px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){ --bg:#0F1417; --surface:#182026; --surface-2:#1E272E; --text:#EAF1F5; --text-muted:#9AABB5; --primary:#5FA8D3; --primary-ink:#0F1417; --accent:#FF6A3D; --secondary:#FFC94D; --green:#4FCB8A; --red:#E05B4E; --border:#2A343C; color-scheme: dark; }
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans Thai',sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:20px;}
+  h1,h2,h3{font-family:'Archivo Black','Noto Sans Thai',sans-serif;font-weight:400;margin:0;letter-spacing:-0.01em;}
+  button{font-family:inherit;cursor:pointer;}
+
+  .wrap{max-width:520px;margin:0 auto;position:relative;min-height:100vh;background:var(--bg);}
+  @media (min-width:760px){ .wrap{max-width:640px;box-shadow:0 0 60px rgba(0,0,0,.08);} }
+
+  .topbar{display:flex;align-items:center;gap:10px;padding:18px 18px 12px;position:sticky;top:0;background:var(--bg);z-index:20;}
+  .avatar{width:42px;height:42px;border-radius:12px;background:var(--secondary);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+  .who .name{font-size:14px;font-weight:800;}
+  .who .sub{font-size:11px;color:var(--text-muted);}
+  .switch-box{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);padding:6px 6px 6px 12px;border-radius:999px;box-shadow:var(--shadow);}
+  .switch-label{font-size:12px;font-weight:700;}
+  .switch{width:38px;height:22px;border-radius:999px;background:var(--border);position:relative;flex-shrink:0;border:none;}
+  .switch.on{background:var(--primary);}
+  .switch::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.25);}
+  .switch.on::after{transform:translateX(16px);}
+
+  .tabs{display:flex;gap:8px;padding:4px 18px 14px;overflow-x:auto;}
+  .tab{flex-shrink:0;border:1px solid var(--border);background:var(--surface);padding:8px 15px;border-radius:999px;font-size:12.5px;font-weight:700;color:var(--text-muted);display:flex;align-items:center;gap:6px;}
+  .tab.active{background:var(--text);color:var(--bg);border-color:var(--text);}
+  .tab .cnt{background:var(--accent);color:#fff;border-radius:999px;font-size:10px;padding:1px 6px;}
+
+  .order-card{margin:0 18px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:14px;}
+  .order-top{display:flex;justify-content:space-between;align-items:center;}
+  .order-code{font-size:13px;font-weight:800;}
+  .order-time{font-size:11px;color:var(--text-muted);}
+  .order-items{font-size:12.5px;color:var(--text-muted);margin-top:8px;line-height:1.6;}
+  .order-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:13px;}
+  .order-addr{font-size:11.5px;color:var(--text-muted);margin-top:6px;}
+  .order-actions{display:flex;gap:8px;margin-top:12px;}
+  .btn-mini{flex:1;border:none;padding:10px;border-radius:999px;font-weight:800;font-size:12.5px;}
+  .btn-mini.accept{background:var(--primary);color:var(--primary-ink);}
+  .btn-mini.reject{background:rgba(192,57,43,.12);color:var(--red);}
+  .btn-mini.ready{background:var(--green);color:#fff;}
+  .tag{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;display:inline-block;}
+  .tag.pending{background:rgba(242,169,59,.22);color:#8a5c10;}
+  .tag.preparing{background:rgba(42,111,151,.15);color:var(--primary);}
+  .tag.ready{background:rgba(31,122,77,.15);color:var(--green);}
+
+  .empty-state{text-align:center;padding:60px 30px;color:var(--text-muted);}
+  .empty-state .e{font-size:44px;margin-bottom:10px;}
+  .empty-state h3{font-size:15px;color:var(--text);margin-bottom:6px;}
+
+  .section-title{padding:0 18px;margin:6px 0 10px;display:flex;justify-content:space-between;align-items:baseline;}
+  .section-title h2{font-size:15px;}
+
+  .stats-row{display:flex;gap:10px;padding:0 18px 16px;}
+  .stat-chip{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:12px;}
+  .stat-chip .lbl{font-size:10.5px;color:var(--text-muted);font-weight:700;}
+  .stat-chip .val{font-size:17px;font-family:'Archivo Black';margin-top:4px;}
+
+  .menu-group-title{padding:14px 18px 6px;font-size:13px;font-weight:800;color:var(--text-muted);}
+  .menu-item{display:flex;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;}
+  .menu-item-emoji{width:44px;height:44px;border-radius:10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+  .menu-item-info{flex:1;min-width:0;}
+  .menu-item-name{font-size:13.5px;font-weight:700;}
+  .menu-item-price{font-size:12px;color:var(--text-muted);margin-top:2px;}
+
+  .onboard-card{margin:60px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-l);padding:22px;text-align:center;}
+  .onboard-emoji{font-size:48px;}
+  .f-label{font-size:12px;font-weight:700;color:var(--text-muted);text-align:left;margin:14px 0 6px;}
+  .f-input, select.f-input{width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;}
+  .btn-primary{margin-top:16px;width:100%;background:var(--primary);color:var(--primary-ink);border:none;padding:13px;border-radius:999px;font-weight:800;font-size:13.5px;}
+
+  .fab-add{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;width:calc(100% - 36px);max-width:484px;background:var(--primary);color:var(--primary-ink);border:none;padding:13px;border-radius:999px;font-weight:800;font-size:13.5px;box-shadow:0 8px 20px rgba(42,111,151,.35);}
+  .overlay{position:fixed;inset:0;background:rgba(15,20,23,.5);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
+  @media (min-width:760px){ .overlay{align-items:center;} }
+  .sheet{background:var(--bg);width:100%;max-width:520px;max-height:88vh;overflow-y:auto;border-radius:22px 22px 0 0;padding:18px 18px 24px;}
+  @media (min-width:760px){ .sheet{border-radius:22px;} }
+  .sheet-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .sheet-close{border:none;background:var(--surface);width:30px;height:30px;border-radius:50%;font-size:14px;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;font-weight:600;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* Supabase Configuration */
+const SUPABASE_URL = 'https://onvrqsyoykopwjunvrhr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v2MCVFaUm-1s6xD6og_eKg_S1vBU4SF';
+let supabaseClient = null;
+try {
+  if (SUPABASE_KEY.indexOf('นำ_ANON_PUBLIC_KEY') === -1 && typeof window.supabase !== 'undefined') {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (err) { console.warn('Supabase Init Error:', err); }
+
+let state = {
+  view: 'loading',   // loading | needs-config | auth | setup-profile | pending | suspended | dashboard
+  authMode: 'login',  // login | signup
+  user: null,
+  restaurant: null,
+  restaurantId: null,
+  tab: 'new',
+  newOrders: [], preparingOrders: [], readyOrders: [], menu: [],
+};
+let ordersChannel = null;
+let activeSheet = null;
+
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove('show'),1900);
+}
+function money(n){ return Number(n||0).toLocaleString('th-TH') + ' บาท'; }
+
+/* ============ AUTH / INIT ============ */
+async function init(){
+  if (!supabaseClient) { state.view = 'needs-config'; render(); return; }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { state.view = 'auth'; state.authMode = 'login'; render(); return; }
+  state.user = session.user;
+  await afterLogin();
+}
+async function afterLogin(){
+  try {
+    const { data, error } = await supabaseClient.from('restaurants').select('*').eq('owner_id', state.user.id).maybeSingle();
+    if (error) throw error;
+    if (!data) { state.view = 'setup-profile'; render(); return; }
+    state.restaurant = data; state.restaurantId = data.id;
+    if (data.status === 'pending') { state.view = 'pending'; render(); return; }
+    if (data.status === 'suspended') { state.view = 'suspended'; render(); return; }
+    await refreshOrders(); await refreshMenu();
+    state.view = 'dashboard'; render();
+    subscribeOrders();
+  } catch (err) { console.error(err); showToast('โหลดข้อมูลไม่สำเร็จ'); }
+}
+async function doSignup(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    if (error) throw error;
+    if (!data.session) { showToast('สมัครสำเร็จ! กรุณายืนยันอีเมลที่ส่งไปให้ แล้วกลับมาเข้าสู่ระบบ'); state.authMode = 'login'; render(); return; }
+    state.user = data.user;
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('สมัครไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function doLogin(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    state.user = data.user;
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('เข้าสู่ระบบไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function doLogout(){
+  if (ordersChannel) { supabaseClient.removeChannel(ordersChannel); ordersChannel = null; }
+  await supabaseClient.auth.signOut();
+  state = { view:'auth', authMode:'login', user:null, restaurant:null, restaurantId:null, tab:'new', newOrders:[], preparingOrders:[], readyOrders:[], menu:[] };
+  render();
+}
+async function submitProfile(){
+  const name = document.getElementById('sp-name').value.trim();
+  const category = document.getElementById('sp-cat').value.trim();
+  const emoji = document.getElementById('sp-emoji').value.trim() || '🍽️';
+  const tags = document.getElementById('sp-tags').value.trim();
+  if (!name) { showToast('กรอกชื่อร้าน'); return; }
+  try {
+    const { error } = await supabaseClient.from('restaurants').insert({ name, category, emoji, tags, owner_id: state.user.id, status: 'pending' });
+    if (error) throw error;
+    showToast('บันทึกโปรไฟล์ร้านแล้ว กำลังรอแอดมินอนุมัติ');
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('บันทึกไม่สำเร็จ: ' + (err.message||'')); }
+}
+
+/* ============ DATA ============ */
+async function refreshOrders(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_code,status,total,address,note,created_at,order_items(name,emoji,qty,price)')
+      .eq('restaurant_id', state.restaurantId)
+      .in('status', ['pending','preparing','ready'])
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    const all = data || [];
+    state.newOrders = all.filter(o => o.status === 'pending');
+    state.preparingOrders = all.filter(o => o.status === 'preparing');
+    state.readyOrders = all.filter(o => o.status === 'ready');
+  } catch (err) { console.warn('refreshOrders failed', err); }
+}
+async function refreshMenu(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('menu_items').select('*').eq('restaurant_id', state.restaurantId).order('group_name').order('name');
+    if (error) throw error;
+    state.menu = data || [];
+  } catch (err) { console.warn('refreshMenu failed', err); }
+}
+function subscribeOrders(){
+  if (!supabaseClient || ordersChannel) return;
+  ordersChannel = supabaseClient
+    .channel('merchant_orders_' + state.restaurantId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async () => {
+      await refreshOrders(); render();
+    })
+    .subscribe();
+}
+
+/* ============ ORDER ACTIONS ============ */
+async function acceptOrder(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'preparing' }).eq('id', id).eq('status','pending'); if (error) throw error;
+    showToast('รับออเดอร์แล้ว กำลังปรุงอาหาร'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function rejectOrder(id){
+  if (!confirm('ยืนยันยกเลิกออเดอร์นี้?')) return;
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'cancelled' }).eq('id', id).eq('status','pending'); if (error) throw error;
+    showToast('ยกเลิกออเดอร์แล้ว'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function markReady(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'ready' }).eq('id', id).eq('status','preparing'); if (error) throw error;
+    showToast('อาหารพร้อมแล้ว รอไรเดอร์มารับ'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+
+/* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
+function openAddItemSheet(){ activeSheet = 'add-item'; render(); }
+function closeSheet(){ activeSheet = null; render(); }
+function previewImage(input){
+  const preview = document.getElementById('mi-preview');
+  if (!preview) return;
+  const file = input.files && input.files[0];
+  if (!file) { preview.style.display = 'none'; return; }
+  const reader = new FileReader();
+  reader.onload = e => { preview.src = e.target.result; preview.style.display = 'block'; };
+  reader.readAsDataURL(file);
+}
+async function toggleMenuItem(id, current){
+  try { const { error } = await supabaseClient.from('menu_items').update({ is_available: !current }).eq('id', id); if (error) throw error;
+    await refreshMenu(); render();
+  } catch (err) { console.error(err); showToast('อัปเดตเมนูไม่สำเร็จ'); }
+}
+async function addMenuItem(){
+  const name = document.getElementById('mi-name').value.trim();
+  const group = document.getElementById('mi-group').value.trim() || 'เมนู';
+  const price = Number(document.getElementById('mi-price').value);
+  const emoji = document.getElementById('mi-emoji').value.trim() || '🍽️';
+  const desc = document.getElementById('mi-desc').value.trim();
+  const fileInput = document.getElementById('mi-image');
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if (!name || !price) { showToast('กรอกชื่อเมนูและราคาให้ครบ'); return; }
+  try {
+    let imageUrl = null;
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+      const path = `${state.restaurantId}/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabaseClient.storage.from('menu-images').upload(path, file);
+      if (upErr) throw upErr;
+      const { data: pub } = supabaseClient.storage.from('menu-images').getPublicUrl(path);
+      imageUrl = pub.publicUrl;
+    }
+    const { error } = await supabaseClient.from('menu_items').insert({
+      restaurant_id: state.restaurantId, group_name: group, name, price, emoji, description: desc, is_available: true, image_url: imageUrl,
+    });
+    if (error) throw error;
+    showToast('เพิ่มเมนูแล้ว');
+    closeSheet();
+    await refreshMenu(); render();
+  } catch (err) { console.error(err); showToast('เพิ่มเมนูไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function deleteMenuItem(id){
+  if (!confirm('ลบเมนูนี้?')) return;
+  try { const { error } = await supabaseClient.from('menu_items').delete().eq('id', id); if (error) throw error;
+    await refreshMenu(); render();
+  } catch (err) { console.error(err); showToast('ลบไม่สำเร็จ'); }
+}
+
+/* ============ RENDER ============ */
+function needsConfigHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">⚙️</div>
+    <h2 style="font-size:17px;margin-top:10px;">ยังไม่ได้เชื่อมต่อฐานข้อมูล</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;line-height:1.6;">กรุณาใส่ Supabase key ในโค้ด (ตัวแปร SUPABASE_KEY) ก่อนใช้งานแอปร้านค้าจริง</p>
+  </div>`;
+}
+function authHtml(){
+  const isSignup = state.authMode === 'signup';
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">🏪</div>
+    <h2 style="font-size:17px;margin-top:10px;">${isSignup ? 'สมัครร้านค้าใหม่' : 'เข้าสู่ระบบร้านค้า'}</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">${isSignup ? 'สมัครด้วยอีเมลของร้าน แล้วตั้งค่าโปรไฟล์ร้านในขั้นถัดไป' : 'เข้าสู่ระบบด้วยอีเมลที่สมัครไว้'}</p>
+    <div class="f-label">อีเมล</div>
+    <input id="auth-email" type="email" class="f-input" placeholder="restaurant@email.com">
+    <div class="f-label">รหัสผ่าน</div>
+    <input id="auth-password" type="password" class="f-input" placeholder="อย่างน้อย 6 ตัวอักษร">
+    <button class="btn-primary" onclick="${isSignup ? 'doSignup()' : 'doLogin()'}">${isSignup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
+    <button class="btn-primary" style="background:transparent;color:var(--primary);margin-top:8px;box-shadow:none;" onclick="state.authMode='${isSignup ? 'login' : 'signup'}';render()">
+      ${isSignup ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีร้าน? สมัครใหม่'}
+    </button>
+  </div>`;
+}
+function setupProfileHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">📝</div>
+    <h2 style="font-size:17px;margin-top:10px;">ตั้งค่าโปรไฟล์ร้านค้า</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">กรอกข้อมูลร้านของคุณ (ส่งให้แอดมินตรวจสอบก่อนเปิดขาย)</p>
+    <div class="f-label">ชื่อร้าน</div><input id="sp-name" class="f-input" placeholder="เช่น ส้มตำแซ่บนัว">
+    <div class="f-label">หมวดหมู่</div><input id="sp-cat" class="f-input" placeholder="เช่น thai, noodle, isaan, dessert, pizza">
+    <div class="f-label">อิโมจิร้าน</div><input id="sp-emoji" class="f-input" placeholder="🍜">
+    <div class="f-label">แท็กร้าน</div><input id="sp-tags" class="f-input" placeholder="เช่น ก๋วยเตี๋ยวเรือ • เย็นตาโฟ">
+    <button class="btn-primary" onclick="submitProfile()">บันทึกและส่งขออนุมัติ</button>
+    <button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+function pendingHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">⏳</div>
+    <h2 style="font-size:17px;margin-top:10px;">รอการอนุมัติจากแอดมิน</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">ร้าน "${state.restaurant ? state.restaurant.name : ''}" กำลังรอตรวจสอบ กรุณาลองใหม่ภายหลัง</p>
+    <button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+function suspendedHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">🚫</div>
+    <h2 style="font-size:17px;margin-top:10px;">ร้านถูกระงับการใช้งาน</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">ติดต่อทีมแอดมินอิ่มด่วนเพื่อสอบถามรายละเอียด</p>
+    <button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+function topbar(){
+  const r = state.restaurant;
+  return `
+  <div class="topbar">
+    <div class="avatar">${r.emoji||'🏪'}</div>
+    <div class="who"><div class="name">${r.name}</div><div class="sub" onclick="doLogout()" style="cursor:pointer;text-decoration:underline;">ออกจากระบบ</div></div>
+    <div class="switch-box"><span class="switch-label">${r.status==='active'?'เปิดร้าน':(r.status==='suspended'?'ถูกระงับ':'รออนุมัติ')}</span></div>
+  </div>`;
+}
+function tabsHtml(){
+  const TABS = [
+    { id:'new', label:'ออเดอร์ใหม่', cnt: state.newOrders.length },
+    { id:'active', label:'กำลังทำ/รอรับ', cnt: state.preparingOrders.length + state.readyOrders.length },
+    { id:'menu', label:'จัดการเมนู', cnt: 0 },
+  ];
+  return `<div class="tabs">${TABS.map(t=>`
+    <button class="tab ${state.tab===t.id?'active':''}" onclick="state.tab='${t.id}';render()">
+      ${t.label}${t.cnt>0?`<span class="cnt">${t.cnt}</span>`:''}
+    </button>`).join('')}</div>`;
+}
+function orderCardHtml(o, actionsHtml, tagClass, tagLabel){
+  const itemsText = (o.order_items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
+  const time = new Date(o.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  return `
+  <div class="order-card">
+    <div class="order-top"><span class="order-code">#${o.order_code}</span><span class="tag ${tagClass}">${tagLabel}</span></div>
+    <div class="order-time">${time} น.</div>
+    <div class="order-items">${itemsText}</div>
+    ${o.note ? `<div class="order-addr">📝 ${o.note}</div>` : ''}
+    <div class="order-addr">📍 ${o.address||''}</div>
+    <div class="order-bottom"><b>${money(o.total)}</b></div>
+    ${actionsHtml}
+  </div>`;
+}
+function renderNewTab(){
+  if (state.newOrders.length === 0) return `<div class="empty-state"><div class="e">🧾</div><h3>ยังไม่มีออเดอร์ใหม่</h3><p>ออเดอร์จากลูกค้าจะขึ้นที่นี่ทันที</p></div>`;
+  return state.newOrders.map(o => orderCardHtml(o, `
+    <div class="order-actions"><button class="btn-mini reject" onclick="rejectOrder('${o.id}')">ปฏิเสธ</button><button class="btn-mini accept" onclick="acceptOrder('${o.id}')">รับออเดอร์</button></div>`, 'pending', 'รอรับออเดอร์')).join('');
+}
+function renderActiveTab(){
+  if (state.preparingOrders.length === 0 && state.readyOrders.length === 0) return `<div class="empty-state"><div class="e">👨‍🍳</div><h3>ไม่มีออเดอร์ที่กำลังทำอยู่</h3></div>`;
+  return `
+  ${state.preparingOrders.map(o => orderCardHtml(o, `<div class="order-actions"><button class="btn-mini ready" onclick="markReady('${o.id}')">อาหารพร้อมแล้ว</button></div>`, 'preparing', 'กำลังปรุง')).join('')}
+  ${state.readyOrders.map(o => orderCardHtml(o, `<div class="order-addr" style="margin-top:10px;">🏍️ รอไรเดอร์มารับอาหาร</div>`, 'ready', 'พร้อมส่ง')).join('')}
+  `;
+}
+function renderMenuTab(){
+  if (state.menu.length === 0) return `<div class="empty-state"><div class="e">🍽️</div><h3>ยังไม่มีเมนู</h3><p>กดปุ่มด้านล่างเพื่อเพิ่มเมนูแรกของร้าน (ใส่รูปได้เลย)</p></div><div style="height:70px"></div>`;
+  const groups = {};
+  state.menu.forEach(m => { (groups[m.group_name] = groups[m.group_name]||[]).push(m); });
+  return Object.keys(groups).map(g => `
+    <div class="menu-group-title">${g}</div>
+    ${groups[g].map(m => `
+      <div class="menu-item">
+        <div class="menu-item-emoji" style="${m.image_url ? `background-image:url('${m.image_url}');background-size:cover;background-position:center;` : ''}">${m.image_url ? '' : m.emoji}</div>
+        <div class="menu-item-info">
+          <div class="menu-item-name">${m.name}</div>
+          <div class="menu-item-price">${money(m.price)} ${m.is_available?'':'· ปิดขายชั่วคราว'}</div>
+        </div>
+        <button class="switch ${m.is_available?'on':''}" onclick="toggleMenuItem('${m.id}', ${m.is_available})"></button>
+        <button class="btn-mini reject" style="flex:0 0 auto;padding:8px 10px;margin-left:6px;" onclick="deleteMenuItem('${m.id}')">🗑️</button>
+      </div>`).join('')}
+  `).join('') + `<div style="height:70px"></div>`;
+}
+function addItemSheetHtml(){
+  return `
+  <div class="sheet">
+    <div class="sheet-title"><h2>เพิ่มเมนูใหม่</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="f-label">รูปเมนู (ถ้ามี)</div>
+    <input id="mi-image" type="file" accept="image/*" class="f-input" onchange="previewImage(this)">
+    <img id="mi-preview" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;">
+    <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด">
+    <div class="f-label">หมวดหมู่ในเมนู</div><input id="mi-group" class="f-input" placeholder="เช่น จานเดียว">
+    <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65">
+    <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜">
+    <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ">
+    <button class="btn-primary" onclick="addMenuItem()">บันทึกเมนู</button>
+  </div>`;
+}
+
+function render(){
+  const app = document.getElementById('app');
+  if (state.view === 'loading') { app.innerHTML = `<div class="empty-state"><div class="e">⏳</div><h3>กำลังโหลด...</h3></div>`; return; }
+  if (state.view === 'needs-config') { app.innerHTML = needsConfigHtml(); return; }
+  if (state.view === 'auth') { app.innerHTML = authHtml(); return; }
+  if (state.view === 'setup-profile') { app.innerHTML = setupProfileHtml(); return; }
+  if (state.view === 'pending') { app.innerHTML = pendingHtml(); return; }
+  if (state.view === 'suspended') { app.innerHTML = suspendedHtml(); return; }
+
+  let tabBody = '';
+  if (state.tab === 'new') tabBody = renderNewTab();
+  if (state.tab === 'active') tabBody = renderActiveTab();
+  if (state.tab === 'menu') tabBody = renderMenuTab();
+
+  app.innerHTML = `
+    ${topbar()}
+    ${tabsHtml()}
+    <div class="section-title"></div>
+    ${tabBody}
+    ${state.tab === 'menu' ? `<button class="fab-add" onclick="openAddItemSheet()">+ เพิ่มเมนูใหม่</button>` : ''}
+  `;
+
+  let overlayEl = document.getElementById('overlay-root');
+  if (overlayEl) overlayEl.remove();
+  if (activeSheet === 'add-item') {
+    const div = document.createElement('div');
+    div.id = 'overlay-root'; div.className = 'overlay';
+    div.onclick = (e) => { if (e.target === div) closeSheet(); };
+    div.innerHTML = addItemSheetHtml();
+    document.body.appendChild(div);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
