@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>อิ่มด่วน — สั่งอาหารส่งถึงบ้าน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Leaflet Map CSS/JS & Supabase SDK -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root {
+    --bg: #FBF3E7;
+    --surface: #FFFFFF;
+    --surface-2: #FFF9F0;
+    --text: #241B15;
+    --text-muted: #7A6A57;
+    --primary: #DD3B1F;
+    --primary-ink: #FFFFFF;
+    --secondary: #F2A93B;
+    --green: #3F8C4A;
+    --border: #EADBC3;
+    --shadow: 0 1px 2px rgba(36,27,21,0.06);
+    --radius-s: 8px;
+    --radius-m: 14px;
+    --radius-l: 22px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17120E;
+      --surface: #241C16;
+      --surface-2: #2B2119;
+      --text: #F5ECDD;
+      --text-muted: #C9B79E;
+      --primary: #FF6A3D;
+      --primary-ink: #17120E;
+      --secondary: #FFC94D;
+      --green: #6FCB7A;
+      --border: #3A2E23;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17120E;
+    --surface: #241C16;
+    --surface-2: #2B2119;
+    --text: #F5ECDD;
+    --text-muted: #C9B79E;
+    --primary: #FF6A3D;
+    --primary-ink: #17120E;
+    --secondary: #FFC94D;
+    --green: #6FCB7A;
+    --border: #3A2E23;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Noto Sans Thai', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding-bottom: 84px;
+  }
+  h1, h2, h3, .display {
+    font-family: 'Archivo Black', 'Noto Sans Thai', sans-serif;
+    font-weight: 400;
+    line-height: 1.15;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  a { color: inherit; }
+  button { font-family: inherit; cursor: pointer; }
+  img { max-width: 100%; }
+  ::selection { background: var(--secondary); color: var(--text); }
+
+  .wrap { max-width: 480px; margin: 0 auto; position: relative; min-height: 100vh; background: var(--bg); }
+  @media (min-width: 700px) {
+    .wrap { max-width: 900px; box-shadow: 0 0 60px rgba(0,0,0,0.08); }
+  }
+  @media (min-width: 1150px) {
+    .wrap { max-width: 1180px; }
+    .hero { padding: 34px 40px; }
+    .hero h1 { font-size: 34px; }
+    .hero p { font-size: 14.5px; }
+    .hero .bowl { font-size: 130px; right: 10px; bottom: -26px; }
+    .search-row, .section-title, .cats, .rest-list, .hero { padding-left: 28px; padding-right: 28px; }
+    .hero { margin-left: 28px; margin-right: 28px; }
+  }
+
+  /* ---------- Topbar ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 18px 10px;
+    position: sticky; top: 0; z-index: 40;
+    background: var(--bg);
+  }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: var(--primary); color: var(--primary-ink);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Archivo Black'; font-size: 16px;
+    transform: rotate(-6deg);
+  }
+  .logo-text { font-family: 'Archivo Black'; font-size: 18px; }
+  .addr-pill {
+    margin-left: auto; display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted); max-width: 130px;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  .icon-btn {
+    border: none; background: var(--surface); width: 38px; height: 38px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow); font-size: 16px; flex-shrink: 0;
+    position: relative;
+  }
+  .cart-badge {
+    position: absolute; top: -4px; right: -4px; background: var(--primary); color: var(--primary-ink);
+    font-size: 10px; font-weight: 800; border-radius: 50%; min-width: 16px; height: 16px;
+    display: flex; align-items: center; justify-content: center; padding: 0 3px;
+  }
+
+  .search-row { padding: 4px 18px 14px; }
+  .search-box {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 11px 16px; box-shadow: var(--shadow);
+  }
+  .search-box input {
+    border: none; outline: none; background: transparent; color: var(--text);
+    font-size: 14px; width: 100%; font-family: inherit;
+  }
+  .search-box input::placeholder { color: var(--text-muted); }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    margin: 4px 18px 18px; border-radius: var(--radius-l);
+    background: linear-gradient(135deg, var(--primary), #ff8a5c 130%);
+    color: #fff; padding: 22px 20px; position: relative; overflow: hidden;
+  }
+  .hero h1 { font-size: 26px; max-width: 70%; }
+  .hero p { margin: 8px 0 0; font-size: 13px; opacity: .92; max-width: 65%; }
+  .hero .bowl {
+    position: absolute; right: -10px; bottom: -18px; font-size: 92px;
+    transform: rotate(8deg); filter: drop-shadow(0 8px 10px rgba(0,0,0,.2));
+  }
+  .hero .steam { position: absolute; right: 46px; top: 14px; font-size: 20px; opacity: .8; animation: float 3s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform: translateY(0); opacity:.5 } 50% { transform: translateY(-8px); opacity: .9 } }
+
+  /* ---------- Categories ---------- */
+  .section-title {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 0 18px; margin: 22px 0 12px;
+  }
+  .section-title h2 { font-size: 17px; }
+  .section-title span { font-size: 12px; color: var(--text-muted); }
+
+  .cats { display: flex; gap: 8px; overflow-x: auto; padding: 0 18px 4px; scrollbar-width: none; }
+  .cats::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0; border: 1px solid var(--border); background: var(--surface);
+    padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  /* ---------- Restaurant cards ---------- */
+  .rest-list { padding: 0 18px; display: flex; flex-direction: column; gap: 14px; }
+  .rest-card {
+    display: flex; gap: 12px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-m); padding: 12px; text-align: left; width: 100%;
+  }
+  .rest-thumb {
+    width: 76px; height: 76px; border-radius: var(--radius-s); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 34px;
+  }
+  .rest-info { flex: 1; min-width: 0; }
+  .rest-name-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .rest-name { font-size: 15px; font-weight: 700; }
+  .promo-tag {
+    font-size: 10px; font-weight: 800; background: var(--secondary); color: #241B15;
+    padding: 2px 7px; border-radius: 5px; flex-shrink: 0;
+  }
+  .rest-tags { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+  .rest-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+  .rest-meta b { color: var(--text); }
+
+  /* ---------- Grid layout desktop ---------- */
+  @media (min-width: 700px) {
+    .rest-list { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  }
+  @media (min-width: 1150px) {
+    .rest-list { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  /* ---------- Bottom nav ---------- */
+  .bottom-nav {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 0;
+    width: 100%; max-width: 480px; background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; z-index: 50;
+  }
+  @media (min-width: 700px) { .bottom-nav { max-width: 900px; } }
+  @media (min-width: 1150px) { .bottom-nav { max-width: 1180px; } }
+  .nav-btn {
+    flex: 1; border: none; background: none; padding: 10px 4px 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--text-muted); font-size: 10px; font-weight: 600;
+  }
+  .nav-btn .nav-ic { font-size: 19px; }
+  .nav-btn.active { color: var(--primary); }
+
+  /* ---------- Restaurant detail ---------- */
+  .detail-header {
+    height: 150px; background: linear-gradient(160deg, var(--secondary), var(--primary));
+    display: flex; align-items: flex-end; padding: 16px 18px; position: relative;
+  }
+  .back-btn {
+    position: absolute; top: 14px; left: 14px; width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,.92); border: none; display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #241B15;
+  }
+  .detail-header .emoji-big { font-size: 64px; position: absolute; right: 14px; top: 14px; opacity: .9; }
+  .detail-sub { padding: 14px 18px 6px; border-bottom: 1px solid var(--border); }
+  .detail-meta { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-muted); margin-top: 6px; flex-wrap: wrap; }
+  .detail-meta b { color: var(--text); }
+
+  .menu-group-title { padding: 6px 18px 2px; font-size: 15px; font-weight: 800; margin-top: 10px; }
+  .menu-item {
+    display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); align-items: center;
+  }
+  .menu-item-emoji {
+    width: 58px; height: 58px; border-radius: var(--radius-s); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  .menu-item-info { flex: 1; min-width: 0; }
+  .menu-item-name { font-size: 14.5px; font-weight: 700; }
+  .menu-item-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+  .menu-item-price { font-size: 14px; font-weight: 800; margin-top: 6px; color: var(--primary); }
+
+  .qty-ctrl { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .qty-btn {
+    width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--primary); background: var(--surface);
+    color: var(--primary); font-size: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; line-height: 1;
+  }
+  .qty-btn.add { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+  .qty-num { font-weight: 800; min-width: 16px; text-align: center; font-size: 14px; }
+
+  /* ---------- Floating cart bar ---------- */
+  .cart-fab {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 78px;
+    width: calc(100% - 36px); max-width: 444px;
+    background: var(--primary); color: var(--primary-ink);
+    border-radius: 999px; padding: 13px 18px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 8px 20px rgba(221,59,31,0.35); border: none; z-index: 45; font-weight: 700; font-size: 14px;
+  }
+  @media (min-width: 700px) { .cart-fab { max-width: 864px; } }
+  @media (min-width: 1150px) { .cart-fab { max-width: 1140px; } }
+
+  /* ---------- Drawer / modal ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(23,18,14,0.5); z-index: 60;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  @media (min-width: 700px) { .overlay { align-items: center; } }
+  .sheet {
+    background: var(--bg); width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+    border-radius: 22px 22px 0 0; padding: 18px 0 24px; position: relative;
+  }
+  @media (min-width: 700px) { .sheet { border-radius: 22px; max-width: 460px; } }
+  .sheet-handle { width: 40px; height: 4px; background: var(--border); border-radius: 3px; margin: 0 auto 12px; }
+  .sheet-title { padding: 0 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .sheet-title h2 { font-size: 18px; }
+  .sheet-close { border: none; background: var(--surface); width: 30px; height: 30px; border-radius: 50%; font-size: 14px; }
+
+  .cart-line { display: flex; gap: 10px; padding: 12px 20px; align-items: center; }
+  .cart-line-emoji { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+  .cart-line-info { flex: 1; min-width: 0; }
+  .cart-line-name { font-size: 13.5px; font-weight: 700; }
+  .cart-line-price { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .summary-row { display: flex; justify-content: space-between; padding: 8px 20px; font-size: 13.5px; color: var(--text-muted); }
+  .summary-row.total { color: var(--text); font-weight: 800; font-size: 16px; border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 14px; }
+
+  .btn-primary {
+    display: block; width: calc(100% - 40px); margin: 14px 20px 0; background: var(--primary); color: var(--primary-ink);
+    border: none; padding: 14px; border-radius: 999px; font-weight: 800; font-size: 14.5px;
+  }
+  .btn-primary:disabled { opacity: .45; }
+  .btn-secondary {
+    display: block; width: calc(100% - 40px); margin: 10px 20px 0; background: transparent; color: var(--text);
+    border: 1.5px solid var(--border); padding: 13px; border-radius: 999px; font-weight: 700; font-size: 14px;
+  }
+
+  .field-label { font-size: 12.5px; font-weight: 700; color: var(--text-muted); padding: 14px 20px 6px; }
+  .field-input {
+    margin: 0 20px; display: block; width: calc(100% - 40px); background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-s); padding: 12px 14px; font-size: 14px; color: var(--text); font-family: inherit;
+  }
+  textarea.field-input { resize: vertical; min-height: 60px; }
+
+  .pay-option {
+    display: flex; align-items: center; gap: 10px; margin: 8px 20px; padding: 12px 14px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-s); font-size: 13.5px; font-weight: 600;
+  }
+  .pay-option.selected { border-color: var(--primary); background: var(--surface-2); }
+  .pay-option .dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--text-muted); flex-shrink: 0; position: relative; }
+  .pay-option.selected .dot { border-color: var(--primary); }
+  .pay-option.selected .dot::after { content:''; position:absolute; inset:3px; background: var(--primary); border-radius: 50%; }
+
+  /* ---------- empty states ---------- */
+  .empty-state { text-align: center; padding: 60px 30px; color: var(--text-muted); }
+  .empty-state .e { font-size: 46px; margin-bottom: 10px; }
+  .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+  .empty-state p { font-size: 13px; line-height: 1.5; }
+
+  /* ---------- Order tracking ---------- */
+  .track-wrap { padding: 20px 18px; }
+  .track-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-l); padding: 22px 18px; text-align: center; }
+  .track-emoji { font-size: 54px; }
+  .track-status { font-size: 18px; font-weight: 800; margin-top: 10px; font-family:'Archivo Black'; }
+  .track-sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+  .progress-bar { height: 8px; background: var(--border); border-radius: 5px; margin: 22px 4px 0; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--primary); border-radius: 5px; transition: width 0.6s ease; }
+  .steps { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10.5px; color: var(--text-muted); }
+  .steps .on { color: var(--primary); font-weight: 800; }
+  .order-id { font-size: 11px; color: var(--text-muted); margin-top: 16px; }
+
+  /* ---------- Live Map Container ---------- */
+  #live-tracking-map {
+    width: 100%;
+    height: 260px;
+    border-radius: var(--radius-m);
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    z-index: 10;
+  }
+
+  .orders-list { padding: 0 18px; display: flex; flex-direction: column; gap: 12px; }
+  .order-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-m); padding: 14px; }
+  .order-card-top { display: flex; justify-content: space-between; align-items: center; }
+  .order-status-tag { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--green); color: #fff; }
+  .order-status-tag.pending { background: var(--secondary); color: #241B15; }
+  .order-card-items { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+  .order-card-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 13px; }
+
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; z-index: 100; opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero .steam, .progress-fill { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   SUPABASE — safe init (ปลอดภัยแม้ยังไม่ตั้งค่า key)
+   วิธีตั้งค่า: ใน Supabase Dashboard > Settings > API
+   คัดลอก "anon public" key มาวางแทนที่ SUPABASE_KEY ด้านล่าง
+   ============================================================ */
+const SUPABASE_URL = 'https://onvrqsyoykopwjunvrhr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v2MCVFaUm-1s6xD6og_eKg_S1vBU4SF';
+let supabaseClient = null;
+try {
+  if (SUPABASE_KEY.indexOf('นำ_ANON_PUBLIC_KEY') === -1 && typeof window.supabase !== 'undefined') {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (err) {
+  console.warn('Supabase init error:', err);
+}
+
+let liveMap = null;
+let riderMarker = null;
+let carIconRef = null;
+let orderChannel = null;
+let gpsChannel = null;
+
+/* ============ CATEGORIES (คงที่ ใช้แค่กรองหน้าจอ) ============ */
+const CATEGORIES = [
+  { id: 'all', label: 'ทั้งหมด', icon: '🍽️' },
+  { id: 'isaan', label: 'ส้มตำ/อีสาน', icon: '🥗' },
+  { id: 'noodle', label: 'ก๋วยเตี๋ยว', icon: '🍜' },
+  { id: 'thai', label: 'อาหารไทย', icon: '🍛' },
+  { id: 'dessert', label: 'ของหวาน/เครื่องดื่ม', icon: '🧋' },
+  { id: 'pizza', label: 'พิซซ่า/พาสต้า', icon: '🍕' },
+  { id: 'japanese', label: 'ญี่ปุ่น', icon: '🍣' },
+  { id: 'fastfood', label: 'ฟาสต์ฟู้ด', icon: '🍔' },
+];
+
+/* ============ MOCK DATA (fallback เมื่อยังไม่เชื่อม Supabase) ============ */
+const MOCK_RESTAURANTS = [
+  { id: 'r1', name: 'ส้มตำแซ่บนัว', cat: 'isaan', emoji: '🥗', color: '#E9F5E1',
+    tags: 'ส้มตำ • ลาบ • ไก่ย่าง', rating: 4.7, time: '20-30 นาที', price: '฿฿', promo: 'ลด 20%',
+    menu: [
+      { group: 'เมนูแนะนำ', items: [
+        { id:'i1', name:'ส้มตำไทย', desc:'รสจัดจ้าน เผ็ดกลาง ใส่ถั่วลิสง', price:55, emoji:'🥗' },
+        { id:'i2', name:'ส้มตำปูปลาร้า', desc:'สูตรอีสานแท้ กลิ่นหอมปลาร้า', price:65, emoji:'🦀' },
+      ]},
+    ],
+  },
+  { id: 'r2', name: 'ก๋วยเตี๋ยวเรือป้าแดง', cat: 'noodle', emoji: '🍜', color: '#FDEDE3',
+    tags: 'ก๋วยเตี๋ยวเรือ • เย็นตาโฟ', rating: 4.6, time: '15-25 นาที', price: '฿',
+    menu: [
+      { group: 'ก๋วยเตี๋ยวเรือ', items: [
+        { id:'i6', name:'เรือหมูน้ำตก', desc:'น้ำซุปเข้มข้น ใส่เลือดหมู', price:45, emoji:'🍜' },
+      ]},
+    ],
+  },
+];
+
+/* ============ STATE ============ */
+const state = {
+  view: 'home',
+  activeCat: 'all',
+  searchQuery: '',
+  currentRestaurantId: null,
+  cart: { restaurantId: null, items: {} },
+  orders: [],
+  activeOrder: null,
+  loading: true,
+  customerId: null,
+  isAnonymous: true,
+  customerName: '',
+};
+let RESTAURANTS = [];
+let dataSource = 'loading'; // 'supabase' | 'mock'
+
+function loadState() {
+  try { const c = localStorage.getItem('imduan_cart'); if (c) state.cart = JSON.parse(c); } catch(e) {}
+  try { const o = localStorage.getItem('imduan_orders'); if (o) state.orders = JSON.parse(o); } catch(e) {}
+}
+function saveCart() { try { localStorage.setItem('imduan_cart', JSON.stringify(state.cart)); } catch(e) {} }
+function saveOrders() { try { localStorage.setItem('imduan_orders', JSON.stringify(state.orders)); } catch(e) {} }
+
+/* ============ SUPABASE DATA LOADING ============ */
+function mapRestaurantRow(r) {
+  const groups = {};
+  (r.menu_items || []).filter(m => m.is_available !== false).forEach(m => {
+    const g = m.group_name || 'เมนู';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push({ id: m.id, name: m.name, desc: m.description || '', price: Number(m.price), emoji: m.emoji || '🍽️', image: m.image_url || null });
+  });
+  return {
+    id: r.id, name: r.name, cat: r.category || 'other', emoji: r.emoji || '🍽️', color: r.color || '#FDEDE3',
+    tags: r.tags || '', rating: r.rating || 0, time: r.prep_time || '20-30 นาที', price: r.price_level || '฿฿',
+    promo: r.promo || null,
+    menu: Object.keys(groups).map(g => ({ group: g, items: groups[g] })),
+  };
+}
+
+async function ensureSession() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    state.customerId = session.user.id;
+    state.isAnonymous = !!session.user.is_anonymous;
+    return;
+  }
+  const { data, error } = await supabaseClient.auth.signInAnonymously();
+  if (error) throw error;
+  state.customerId = data.user.id;
+  state.isAnonymous = true;
+}
+async function ensureCustomerRow() {
+  const { data, error } = await supabaseClient.from('customers').select('id,name,address').eq('id', state.customerId).maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    const { error: insErr } = await supabaseClient.from('customers').insert({ id: state.customerId, name: 'ลูกค้าอิ่มด่วน' });
+    if (insErr) throw insErr;
+  } else if (data.name) {
+    state.customerName = data.name;
+  }
+}
+async function loginWithProvider(provider) {
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session && session.user.is_anonymous) {
+      const { error } = await supabaseClient.auth.linkIdentity({ provider, options: { redirectTo: window.location.href } });
+      if (error) throw error;
+    } else {
+      const { error } = await supabaseClient.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.href } });
+      if (error) throw error;
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('เข้าสู่ระบบไม่สำเร็จ: ' + (err.message || ''));
+  }
+}
+async function doLogout() {
+  try { await supabaseClient.auth.signOut(); } catch (err) { console.warn(err); }
+  location.reload();
+}
+
+async function init() {
+  loadState();
+  render(); // แสดงหน้า loading ก่อน
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('restaurants')
+        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
+        .eq('status', 'active')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      RESTAURANTS = (data || []).map(mapRestaurantRow);
+      dataSource = 'supabase';
+    } catch (err) {
+      console.warn('Load restaurants failed, using demo data instead:', err);
+      RESTAURANTS = MOCK_RESTAURANTS;
+      dataSource = 'mock';
+    }
+    if (dataSource === 'supabase') {
+      try {
+        await ensureSession();
+        await ensureCustomerRow();
+      } catch (err) {
+        // มักเกิดจากยังไม่เปิด "Allow anonymous sign-ins" ใน Supabase Authentication > Providers
+        console.warn('Auth session failed (check "Allow anonymous sign-ins" in Supabase):', err);
+        state.authBlocked = true;
+      }
+    }
+  } else {
+    RESTAURANTS = MOCK_RESTAURANTS;
+    dataSource = 'mock';
+  }
+  if (state.cart.restaurantId && !findRestaurant(state.cart.restaurantId)) {
+    state.cart = { restaurantId: null, items: {} };
+    saveCart();
+  }
+  state.loading = false;
+  render();
+}
+
+/* ============ HELPERS ============ */
+function findRestaurant(id) { return RESTAURANTS.find(r => r.id === id); }
+function findItem(restaurant, itemId) {
+  for (const g of restaurant.menu) {
+    const found = g.items.find(i => i.id === itemId);
+    if (found) return found;
+  }
+  return null;
+}
+function cartCount() { return Object.values(state.cart.items).reduce((a,b) => a+b, 0); }
+function cartSubtotal() {
+  const r = findRestaurant(state.cart.restaurantId);
+  if (!r) return 0;
+  let sum = 0;
+  for (const [id, qty] of Object.entries(state.cart.items)) {
+    const item = findItem(r, id);
+    if (item) sum += item.price * qty;
+  }
+  return sum;
+}
+function money(n) { return Number(n||0).toLocaleString('th-TH') + ' บาท'; }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+/* ============ ACTIONS ============ */
+function setView(v) {
+  if (state.view === 'tracking' && v !== 'tracking') {
+    if (supabaseClient && orderChannel) { supabaseClient.removeChannel(orderChannel); orderChannel = null; }
+    if (supabaseClient && gpsChannel) { supabaseClient.removeChannel(gpsChannel); gpsChannel = null; }
+    if (liveMap) { liveMap.remove(); liveMap = null; riderMarker = null; }
+  }
+  state.view = v; render(); window.scrollTo(0,0);
+}
+async function goToOrders() {
+  setView('orders');
+  if (dataSource === 'supabase' && state.customerId) {
+    await refreshMyOrders();
+    if (state.view === 'orders') render();
+  }
+}
+function openRestaurant(id) { state.currentRestaurantId = id; setView('detail'); }
+
+function addToCart(restaurantId, itemId) {
+  if (state.cart.restaurantId && state.cart.restaurantId !== restaurantId && cartCount() > 0) {
+    const ok = confirm('ตะกร้าของคุณมีสินค้าจากร้านอื่นอยู่ เริ่มตะกร้าใหม่สำหรับร้านนี้หรือไม่?');
+    if (!ok) return;
+    state.cart = { restaurantId, items: {} };
+  }
+  if (!state.cart.restaurantId) state.cart.restaurantId = restaurantId;
+  state.cart.items[itemId] = (state.cart.items[itemId] || 0) + 1;
+  saveCart(); render();
+}
+function removeFromCart(itemId) {
+  if (!state.cart.items[itemId]) return;
+  state.cart.items[itemId] -= 1;
+  if (state.cart.items[itemId] <= 0) delete state.cart.items[itemId];
+  if (Object.keys(state.cart.items).length === 0) state.cart.restaurantId = null;
+  saveCart(); render();
+}
+function clearCart() { state.cart = { restaurantId: null, items: {} }; saveCart(); }
+
+function openCartSheet() { openSheet('cart'); }
+function openCheckoutSheet() { openSheet('checkout'); }
+function openProfileSheet() { openSheet('profile'); }
+let activeSheet = null;
+let checkoutPayment = 'cash';
+function openSheet(name) { activeSheet = name; render(); }
+function closeSheet() { activeSheet = null; render(); }
+
+const STATUS_MAP = {
+  pending:        { label: 'รอร้านรับออเดอร์',              emoji: '🧾', pct: 8  },
+  preparing:      { label: 'ร้านกำลังปรุงอาหาร',             emoji: '👨‍🍳', pct: 28 },
+  ready:          { label: 'อาหารพร้อมแล้ว รอไรเดอร์มารับ',   emoji: '📦', pct: 46 },
+  rider_assigned: { label: 'ไรเดอร์กำลังไปที่ร้าน',           emoji: '🏍️', pct: 60 },
+  at_restaurant:  { label: 'ไรเดอร์ถึงร้านแล้ว',              emoji: '🏍️', pct: 74 },
+  picked_up:      { label: 'ไรเดอร์กำลังนำอาหารมาส่งคุณ',     emoji: '🛵', pct: 88 },
+  delivered:      { label: 'จัดส่งสำเร็จ',                    emoji: '✅', pct: 100 },
+  cancelled:      { label: 'ออเดอร์ถูกยกเลิก',                emoji: '❌', pct: 0 },
+};
+const STATUS_ORDER = ['pending','preparing','ready','rider_assigned','at_restaurant','picked_up','delivered'];
+
+async function placeOrder() {
+  const addr = document.getElementById('addr-input') ? document.getElementById('addr-input').value.trim() : '';
+  const custName = document.getElementById('name-input') ? document.getElementById('name-input').value.trim() : '';
+  const custPhone = document.getElementById('phone-input') ? document.getElementById('phone-input').value.trim() : '';
+  const note = document.getElementById('note-input') ? document.getElementById('note-input').value.trim() : '';
+  if (!addr) { showToast('กรุณากรอกที่อยู่จัดส่ง'); return; }
+  const r = findRestaurant(state.cart.restaurantId);
+  if (!r) { showToast('ไม่พบร้านค้า'); return; }
+  const cartLines = Object.entries(state.cart.items).map(([id, qty]) => {
+    const item = findItem(r, id);
+    return { menu_item_id: id, name: item.name, qty, price: item.price, emoji: item.emoji };
+  });
+  const subtotal = cartSubtotal();
+  const deliveryFee = subtotal > 0 ? 15 : 0;
+  const total = subtotal + deliveryFee;
+  const orderCode = 'OD' + Date.now().toString().slice(-8);
+
+  if (dataSource === 'supabase' && supabaseClient && state.customerId) {
+    try {
+      if (custName || custPhone) {
+        await supabaseClient.from('customers').update({
+          name: custName || undefined, phone: custPhone || undefined, address: addr,
+        }).eq('id', state.customerId);
+      }
+      const { data: orderRow, error: orderErr } = await supabaseClient
+        .from('orders')
+        .insert({
+          order_code: orderCode, customer_id: state.customerId, restaurant_id: r.id,
+          status: 'pending', subtotal, delivery_fee: deliveryFee, total,
+          address: addr, payment_method: checkoutPayment, note,
+        })
+        .select().single();
+      if (orderErr) throw orderErr;
+      const itemsPayload = cartLines.map(i => ({
+        order_id: orderRow.id, menu_item_id: i.menu_item_id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price,
+      }));
+      const { error: itemsErr } = await supabaseClient.from('order_items').insert(itemsPayload);
+      if (itemsErr) throw itemsErr;
+
+      const order = {
+        id: orderRow.id, code: orderRow.order_code, restaurantId: r.id, restaurantName: r.name, restaurantEmoji: r.emoji,
+        items: cartLines, subtotal, deliveryFee, total, address: addr, payment: checkoutPayment,
+        date: new Date().toLocaleString('th-TH'), status: 'pending', riderId: null,
+      };
+      state.orders.unshift(order);
+      state.activeOrder = order;
+      clearCart(); activeSheet = null;
+      setView('tracking');
+      subscribeToOrder(order.id);
+      showToast('สั่งซื้อสำเร็จ! ร้านค้าได้รับออเดอร์ของคุณแล้ว');
+    } catch (err) {
+      console.error(err);
+      showToast('สั่งซื้อไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+  } else {
+    // dataSource เป็น supabase แต่ยังไม่มี customerId (มักเกิดจากยังไม่เปิด anonymous sign-in) หรือยังไม่เชื่อม Supabase เลย
+    // จำลองสถานะในเครื่องนี้เท่านั้น ไม่ถูกส่งไปที่ร้านค้า/ไรเดอร์จริง
+    const order = {
+      id: orderCode, code: orderCode, restaurantId: r.id, restaurantName: r.name, restaurantEmoji: r.emoji,
+      items: cartLines, subtotal, deliveryFee, total, address: addr, payment: checkoutPayment,
+      date: new Date().toLocaleString('th-TH'), status: 'pending', riderId: null, demo: true,
+    };
+    state.orders.unshift(order);
+    state.activeOrder = order;
+    saveOrders();
+    clearCart(); activeSheet = null;
+    setView('tracking');
+    if (dataSource === 'supabase' && !state.customerId) {
+      showToast('⚠️ ยังสั่งจริงไม่ได้ — ต้องเปิด Allow anonymous sign-ins ใน Supabase ก่อน (ตอนนี้เป็นแค่ตัวอย่าง)');
+    }
+    simulateProgressDemo(order);
+  }
+}
+
+function simulateProgressDemo(order) {
+  let idx = 0;
+  const timer = setInterval(() => {
+    idx++;
+    if (idx >= STATUS_ORDER.length) { clearInterval(timer); return; }
+    const o = state.orders.find(x => x.id === order.id);
+    if (!o) { clearInterval(timer); return; }
+    o.status = STATUS_ORDER[idx];
+    saveOrders();
+    if (state.view === 'tracking' && state.activeOrder && state.activeOrder.id === order.id) {
+      state.activeOrder = o; render();
+    }
+  }, 2600);
+}
+
+/* ============ REALTIME (Supabase) ============ */
+function subscribeToOrder(orderId) {
+  if (!supabaseClient) return;
+  if (orderChannel) { supabaseClient.removeChannel(orderChannel); orderChannel = null; }
+  orderChannel = supabaseClient
+    .channel('order_track_' + orderId)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, payload => {
+      const o = state.orders.find(x => x.id === orderId);
+      if (!o) return;
+      o.status = payload.new.status;
+      o.riderId = payload.new.rider_id;
+      if (state.activeOrder && state.activeOrder.id === orderId) state.activeOrder = o;
+      if (o.riderId) subscribeToRiderGps(o.riderId);
+      if (state.view === 'tracking') render();
+    })
+    .subscribe();
+}
+function subscribeToRiderGps(riderId) {
+  if (!supabaseClient || !riderId) return;
+  if (gpsChannel) { supabaseClient.removeChannel(gpsChannel); gpsChannel = null; }
+  gpsChannel = supabaseClient
+    .channel('gps_track_' + riderId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'gps_locations', filter: `rider_id=eq.${riderId}` }, payload => {
+      const row = payload.new;
+      if (!row || !liveMap) return;
+      if (!riderMarker) riderMarker = L.marker([row.lat, row.lng], { icon: carIconRef }).addTo(liveMap);
+      else riderMarker.setLatLng([row.lat, row.lng]);
+      liveMap.panTo([row.lat, row.lng]);
+    })
+    .subscribe();
+}
+async function refreshMyOrders() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_code,status,subtotal,delivery_fee,total,address,payment_method,created_at,rider_id,restaurants(name,emoji),order_items(name,emoji,qty,price)')
+      .eq('customer_id', state.customerId)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    state.orders = (data || []).map(o => ({
+      id: o.id, code: o.order_code, status: o.status,
+      restaurantName: o.restaurants ? o.restaurants.name : 'ร้านค้า',
+      restaurantEmoji: o.restaurants ? o.restaurants.emoji : '🍽️',
+      items: o.order_items || [], subtotal: o.subtotal, deliveryFee: o.delivery_fee, total: o.total,
+      address: o.address, payment: o.payment_method, date: new Date(o.created_at).toLocaleString('th-TH'),
+      riderId: o.rider_id,
+    }));
+  } catch (err) { console.warn('refresh orders failed', err); }
+}
+function openOrderTracking(id) {
+  const o = state.orders.find(x => x.id === id);
+  if (!o) return;
+  state.activeOrder = o;
+  setView('tracking');
+  if (dataSource === 'supabase') subscribeToOrder(o.id);
+}
+
+/* ============ RENDER: SHARED ============ */
+function demoBannerHtml() {
+  if (dataSource === 'supabase') return '';
+  return `<div style="margin:8px 18px 0;background:var(--secondary);color:#241B15;font-size:11.5px;font-weight:700;padding:9px 14px;border-radius:10px;line-height:1.5;">⚠️ ยังไม่เชื่อมฐานข้อมูลจริง (ใส่ Supabase anon key ในโค้ด) — ตอนนี้แสดงข้อมูลตัวอย่างเท่านั้น ออเดอร์จะไม่ถูกส่งไปที่ร้านค้าหรือไรเดอร์จริง</div>`;
+}
+function topbar() {
+  return `
+  <div class="topbar">
+    <div class="logo"><div class="logo-mark">อ</div><div class="logo-text">อิ่มด่วน</div></div>
+    <div class="addr-pill">📍 ส่งไปที่ บ้าน • สุขุมวิท</div>
+    <button class="icon-btn" onclick="goToOrders()">🧾</button>
+    <button class="icon-btn" onclick="openCartSheet()">🛒${cartCount()>0?`<span class="cart-badge">${cartCount()}</span>`:''}</button>
+  </div>`;
+}
+function bottomNav() {
+  const tab = state.view === 'orders' ? 'orders' : (state.view === 'tracking' ? 'orders' : 'home');
+  return `
+  <div class="bottom-nav">
+    <button class="nav-btn ${tab==='home'?'active':''}" onclick="setView('home')"><span class="nav-ic">🏠</span>หน้าแรก</button>
+    <button class="nav-btn" onclick="openCartSheet()"><span class="nav-ic">🛒</span>ตะกร้า</button>
+    <button class="nav-btn ${tab==='orders'?'active':''}" onclick="goToOrders()"><span class="nav-ic">🧾</span>ออเดอร์</button>
+    <button class="nav-btn" onclick="openProfileSheet()"><span class="nav-ic">👤</span>โปรไฟล์</button>
+  </div>`;
+}
+
+/* ============ RENDER: HOME ============ */
+function renderHome() {
+  const q = state.searchQuery.trim().toLowerCase();
+  let list = RESTAURANTS.filter(r => state.activeCat === 'all' || r.cat === state.activeCat);
+  if (q) list = list.filter(r => r.name.toLowerCase().includes(q) || r.tags.toLowerCase().includes(q));
+  return `
+  ${topbar()}
+  ${demoBannerHtml()}
+  <div class="search-row">
+    <div class="search-box">
+      <span>🔍</span>
+      <input placeholder="ค้นหาร้านอาหารหรือเมนู..." value="${state.searchQuery}" oninput="state.searchQuery=this.value; renderList();" />
+    </div>
+  </div>
+  <div class="hero">
+    <h1>หิวไหม? สั่งเลยตอนนี้</h1>
+    <p>ส่งฟรีออเดอร์แรก เมื่อสั่งขั้นต่ำ 99 บาท</p>
+    <div class="steam">〰️</div><div class="bowl">🍜</div>
+  </div>
+  <div class="section-title"><h2>หมวดหมู่</h2></div>
+  <div class="cats">
+    ${CATEGORIES.map(c => `<button class="chip ${state.activeCat===c.id?'active':''}" onclick="state.activeCat='${c.id}'; renderList();">${c.icon} ${c.label}</button>`).join('')}
+  </div>
+  <div class="section-title"><h2>ร้านแนะนำใกล้คุณ</h2><span id="rest-count">${list.length} ร้าน</span></div>
+  <div class="rest-list" id="rest-list">${restaurantListHtml(list)}</div>
+  <div style="height:100px"></div>
+  `;
+}
+function restaurantListHtml(list) {
+  if (list.length === 0) {
+    return `<div class="empty-state" style="grid-column:1/-1"><div class="e">🔎</div><h3>ไม่พบร้านที่ค้นหา</h3><p>ลองค้นหาด้วยคำอื่น หรือเลือกหมวดหมู่อื่นดูนะ</p></div>`;
+  }
+  return list.map(r => `
+    <button class="rest-card" onclick="openRestaurant('${r.id}')">
+      <div class="rest-thumb" style="background:${r.color}">${r.emoji}</div>
+      <div class="rest-info">
+        <div class="rest-name-row"><div class="rest-name">${r.name}</div>${r.promo ? `<div class="promo-tag">${r.promo}</div>` : ''}</div>
+        <div class="rest-tags">${r.tags}</div>
+        <div class="rest-meta"><span>⭐ <b>${r.rating}</b></span><span>🕐 <b>${r.time}</b></span><span><b>${r.price}</b></span></div>
+      </div>
+    </button>`).join('');
+}
+function renderList() {
+  const q = state.searchQuery.trim().toLowerCase();
+  let list = RESTAURANTS.filter(r => state.activeCat === 'all' || r.cat === state.activeCat);
+  if (q) list = list.filter(r => r.name.toLowerCase().includes(q) || r.tags.toLowerCase().includes(q));
+  document.getElementById('rest-list').innerHTML = restaurantListHtml(list);
+  document.getElementById('rest-count').textContent = list.length + ' ร้าน';
+  document.querySelectorAll('.chip').forEach(el => el.classList.remove('active'));
+  const idx = CATEGORIES.findIndex(c => c.id === state.activeCat);
+  const chips = document.querySelectorAll('.chip');
+  if (chips[idx]) chips[idx].classList.add('active');
+}
+
+/* ============ RENDER: DETAIL ============ */
+function renderDetail() {
+  const r = findRestaurant(state.currentRestaurantId);
+  if (!r) return `<div class="empty-state">ไม่พบร้าน</div>`;
+  const inCartHere = state.cart.restaurantId === r.id;
+  const menuHtml = r.menu.map(group => `
+    <div class="menu-group-title">${group.group}</div>
+    ${group.items.map(item => {
+      const qty = inCartHere ? (state.cart.items[item.id] || 0) : 0;
+      return `
+      <div class="menu-item">
+        <div class="menu-item-emoji" style="${item.image ? `background-image:url('${item.image}');background-size:cover;background-position:center;` : `background:${r.color}`}">${item.image ? '' : item.emoji}</div>
+        <div class="menu-item-info">
+          <div class="menu-item-name">${item.name}</div>
+          <div class="menu-item-desc">${item.desc}</div>
+          <div class="menu-item-price">${money(item.price)}</div>
+        </div>
+        <div class="qty-ctrl">
+          ${qty > 0 ? `<button class="qty-btn" onclick="removeFromCart('${item.id}')">−</button><div class="qty-num">${qty}</div>` : ''}
+          <button class="qty-btn add" onclick="addToCart('${r.id}','${item.id}')">+</button>
+        </div>
+      </div>`;
+    }).join('')}
+  `).join('');
+  return `
+  <div class="detail-header" style="background:linear-gradient(160deg, ${r.color}, var(--secondary))">
+    <button class="back-btn" onclick="setView('home')">←</button>
+    <div class="emoji-big">${r.emoji}</div>
+  </div>
+  <div class="detail-sub">
+    <h1 style="font-size:20px">${r.name}</h1>
+    <div class="detail-meta"><span>⭐ <b>${r.rating}</b></span><span>🕐 <b>${r.time}</b></span><span><b>${r.price}</b></span><span>${r.tags}</span></div>
+  </div>
+  ${menuHtml}
+  <div style="height:110px"></div>
+  `;
+}
+
+/* ============ RENDER: CART / CHECKOUT SHEETS ============ */
+function cartSheetHtml() {
+  const r = findRestaurant(state.cart.restaurantId);
+  const empty = !r || cartCount() === 0;
+  if (empty) {
+    return `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><h2>ตะกร้าของคุณ</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+      <div class="empty-state"><div class="e">🛒</div><h3>ตะกร้าว่างเปล่า</h3><p>เลือกเมนูอร่อยๆ แล้วกลับมาสั่งกันเลย!</p></div>
+      <button class="btn-primary" onclick="closeSheet()">เลือกเมนูต่อ</button>
+    </div>`;
+  }
+  const lines = Object.entries(state.cart.items).map(([id, qty]) => {
+    const item = findItem(r, id);
+    return `
+    <div class="cart-line">
+      <div class="cart-line-emoji" style="${item.image ? `background-image:url('${item.image}');background-size:cover;background-position:center;` : `background:${r.color}`}">${item.image ? '' : item.emoji}</div>
+      <div class="cart-line-info"><div class="cart-line-name">${item.name}</div><div class="cart-line-price">${money(item.price)}</div></div>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="removeFromCart('${id}')">−</button>
+        <div class="qty-num">${qty}</div>
+        <button class="qty-btn add" onclick="addToCart('${r.id}','${id}')">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  const subtotal = cartSubtotal(); const deliveryFee = 15;
+  return `
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title"><h2>ตะกร้าจาก ${r.name}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    ${lines}
+    <div class="summary-row"><span>ราคาอาหาร</span><span>${money(subtotal)}</span></div>
+    <div class="summary-row"><span>ค่าจัดส่ง</span><span>${money(deliveryFee)}</span></div>
+    <div class="summary-row total"><span>ยอดรวม</span><span>${money(subtotal + deliveryFee)}</span></div>
+    <button class="btn-primary" onclick="openCheckoutSheet()">ดำเนินการสั่งซื้อ</button>
+    <button class="btn-secondary" onclick="closeSheet()">เลือกเมนูเพิ่ม</button>
+  </div>`;
+}
+function checkoutSheetHtml() {
+  const r = findRestaurant(state.cart.restaurantId);
+  const subtotal = cartSubtotal(); const deliveryFee = 15;
+  const payOptions = [
+    { id: 'cash', label: '💵 เงินสดปลายทาง' },
+    { id: 'card', label: '💳 บัตรเครดิต/เดบิต' },
+    { id: 'wallet', label: '📱 อิ่มด่วนวอลเล็ท' },
+  ];
+  return `
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title"><h2>ยืนยันคำสั่งซื้อ</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+
+    <div class="field-label">ชื่อผู้รับ</div>
+    <input class="field-input" id="name-input" placeholder="ชื่อ-นามสกุล">
+
+    <div class="field-label">เบอร์โทร</div>
+    <input class="field-input" id="phone-input" placeholder="08xxxxxxxx">
+
+    <div class="field-label">ที่อยู่จัดส่ง</div>
+    <textarea class="field-input" id="addr-input" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด...">99/1 ซอยสุขุมวิท 24 คลองตัน วัฒนา กรุงเทพฯ</textarea>
+
+    <div class="field-label">วิธีชำระเงิน</div>
+    ${payOptions.map(p => `
+      <div class="pay-option ${checkoutPayment===p.id?'selected':''}" onclick="checkoutPayment='${p.id}'; openSheet('checkout')">
+        <div class="dot"></div>${p.label}
+      </div>`).join('')}
+
+    <div class="field-label">หมายเหตุถึงร้าน (ถ้ามี)</div>
+    <textarea class="field-input" id="note-input" placeholder="เช่น ไม่ใส่ผักชี, เผ็ดน้อย"></textarea>
+
+    <div class="summary-row" style="margin-top:10px"><span>ร้าน ${r ? r.name : ''}</span><span></span></div>
+    <div class="summary-row"><span>ราคาอาหาร</span><span>${money(subtotal)}</span></div>
+    <div class="summary-row"><span>ค่าจัดส่ง</span><span>${money(deliveryFee)}</span></div>
+    <div class="summary-row total"><span>ยอดรวมทั้งหมด</span><span>${money(subtotal + deliveryFee)}</span></div>
+
+    <button class="btn-primary" onclick="placeOrder()">สั่งซื้อเลย • ${money(subtotal + deliveryFee)}</button>
+  </div>`;
+}
+
+/* ============ RENDER: PROFILE / LOGIN SHEET ============ */
+function profileSheetHtml() {
+  if (dataSource !== 'supabase') {
+    return `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+      <div class="empty-state"><div class="e">🔌</div><h3>ยังไม่เชื่อมฐานข้อมูล</h3><p>ระบบเข้าสู่ระบบจะใช้ได้เมื่อเชื่อม Supabase แล้ว</p></div>
+    </div>`;
+  }
+  if (!state.customerId) {
+    return `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+      <div class="empty-state"><div class="e">🔐</div><h3>ระบบเข้าสู่ระบบยังไม่พร้อม</h3><p>ต้องเปิด "Allow anonymous sign-ins" ใน Supabase Dashboard &gt; Authentication &gt; Providers ก่อน แล้วรีเฟรชหน้านี้ใหม่ (ยังสั่งอาหารแบบไม่ล็อกอินได้ตามปกติ)</p></div>
+    </div>`;
+  }
+  return `
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div style="padding:0 20px;">
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.6;">
+        ${state.isAnonymous
+          ? 'ตอนนี้คุณสั่งอาหารแบบบัญชีชั่วคราว (ยังไม่ได้ล็อกอิน) — เข้าสู่ระบบเพื่อเก็บประวัติการสั่งซื้อไว้ถาวรและสั่งจากเครื่องอื่นได้'
+          : '✅ เข้าสู่ระบบแล้ว ประวัติการสั่งซื้อของคุณถูกเก็บไว้ถาวร'}
+      </p>
+      ${state.isAnonymous ? `
+        <button class="btn-primary" onclick="loginWithProvider('google')">เข้าสู่ระบบด้วย Google</button>
+        <button class="btn-secondary" onclick="loginWithProvider('facebook')">เข้าสู่ระบบด้วย Facebook</button>
+      ` : `
+        <button class="btn-secondary" onclick="doLogout()">ออกจากระบบ</button>
+      `}
+    </div>
+    <div style="height:10px"></div>
+  </div>`;
+}
+
+/* ============ RENDER: TRACKING WITH LIVE MAP ============ */
+function renderTracking() {
+  const o = state.activeOrder || state.orders[0];
+  if (!o) return `<div class="empty-state">ไม่พบคำสั่งซื้อ</div>`;
+  const info = STATUS_MAP[o.status] || STATUS_MAP.pending;
+  const stepIdx = Math.max(0, STATUS_ORDER.indexOf(o.status));
+  setTimeout(() => initLiveTrackingMap(o), 100);
+  return `
+  ${topbar()}
+  <div class="track-wrap">
+    <div class="track-card">
+      <div class="track-emoji">${info.emoji}</div>
+      <div class="track-status">${info.label}</div>
+      <div class="track-sub">${o.status==='cancelled' ? 'ติดต่อร้านค้าหรือฝ่ายบริการลูกค้า' : (o.status==='delivered' ? 'ขอบคุณที่ใช้บริการอิ่มด่วน 🎉' : (o.demo ? 'โหมดตัวอย่าง (ยังไม่เชื่อมฐานข้อมูล)' : 'ระบบจะอัปเดตสถานะให้อัตโนมัติ'))}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${info.pct}%"></div></div>
+      <div class="steps">${STATUS_ORDER.map((s,i) => `<span class="${i<=stepIdx?'on':''}">${i+1}</span>`).join('')}</div>
+      <div class="order-id">เลขคำสั่งซื้อ #${o.code || o.id}</div>
+    </div>
+    <div id="live-tracking-map"></div>
+    <div class="section-title" style="padding:0"><h2>สรุปคำสั่งซื้อ</h2></div>
+    <div class="order-card" style="margin-top:8px">
+      <div class="order-card-top"><span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span></div>
+      <div class="order-card-items">${o.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+      <div class="order-card-bottom"><span>ส่งไปที่ ${o.address}</span></div>
+      <div class="order-card-bottom"><b>รวม ${money(o.total)}</b></div>
+    </div>
+    <button class="btn-secondary" onclick="setView('home')">กลับหน้าแรก สั่งเพิ่ม</button>
+  </div>
+  ${bottomNav()}
+  `;
+}
+function initLiveTrackingMap(o) {
+  const mapContainer = document.getElementById('live-tracking-map');
+  if (!mapContainer || typeof L === 'undefined' || liveMap) return;
+  liveMap = L.map('live-tracking-map').setView([13.7563, 100.5018], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(liveMap);
+  carIconRef = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png', iconSize: [38,38], iconAnchor: [19,19] });
+  if (o && o.riderId) subscribeToRiderGps(o.riderId);
+}
+
+/* ============ RENDER: ORDERS HISTORY ============ */
+function renderOrders() {
+  return `
+  ${topbar()}
+  <div class="section-title"><h2>ประวัติคำสั่งซื้อ</h2></div>
+  ${state.orders.length === 0 ? `
+    <div class="empty-state"><div class="e">🧾</div><h3>ยังไม่มีคำสั่งซื้อ</h3><p>เมื่อคุณสั่งอาหาร ประวัติจะแสดงที่นี่</p></div>
+  ` : `
+  <div class="orders-list">
+    ${state.orders.map(o => {
+      const info = STATUS_MAP[o.status] || STATUS_MAP.pending;
+      const done = o.status === 'delivered' || o.status === 'cancelled';
+      return `
+      <div class="order-card" onclick="openOrderTracking('${o.id}')">
+        <div class="order-card-top">
+          <span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span>
+          <span class="order-status-tag ${done?'':'pending'}">${info.label}</span>
+        </div>
+        <div class="order-card-items">${o.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+        <div class="order-card-bottom"><span style="color:var(--text-muted)">${o.date}</span><b>${money(o.total)}</b></div>
+      </div>`;
+    }).join('')}
+  </div>
+  `}
+  <div style="height:100px"></div>
+  ${bottomNav()}
+  `;
+}
+
+/* ============ MAIN RENDER ============ */
+function render() {
+  const app = document.getElementById('app');
+  if (state.loading) { app.innerHTML = `<div class="empty-state"><div class="e">⏳</div><h3>กำลังโหลดร้านอาหาร...</h3></div>`; return; }
+  let html = '';
+  if (state.view === 'home') html = renderHome();
+  if (state.view === 'detail') html = renderDetail();
+  if (state.view === 'tracking') html = renderTracking();
+  if (state.view === 'orders') html = renderOrders();
+
+  let fab = '';
+  if ((state.view === 'home' || state.view === 'detail') && cartCount() > 0 && !activeSheet) {
+    const r = findRestaurant(state.cart.restaurantId);
+    fab = `<button class="cart-fab" onclick="openCartSheet()">
+      <span>🛒 ${cartCount()} รายการ · ${r ? r.name : ''}</span>
+      <span>${money(cartSubtotal())} ›</span>
+    </button>`;
+  }
+  let nav = (state.view === 'home' || state.view === 'detail') ? bottomNav() : '';
+  if (state.view === 'detail') nav = '';
+
+  app.innerHTML = html + fab + nav;
+
+  let overlayEl = document.getElementById('overlay-root');
+  if (overlayEl) overlayEl.remove();
+  if (activeSheet) {
+    const div = document.createElement('div');
+    div.id = 'overlay-root'; div.className = 'overlay';
+    div.onclick = (e) => { if (e.target === div) closeSheet(); };
+    div.innerHTML = activeSheet === 'cart' ? cartSheetHtml() : (activeSheet === 'profile' ? profileSheetHtml() : checkoutSheetHtml());
+    document.body.appendChild(div);
+  }
+}
+
+/* ============ INIT ============ */
+init();
+</script>
+</body>
+</html>
