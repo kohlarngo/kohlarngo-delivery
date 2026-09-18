@@ -185,19 +185,52 @@ async function afterLogin(){
 async function doSignup(){
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
+  const firstName = document.getElementById('sp-first').value.trim();
+  const lastName = document.getElementById('sp-last').value.trim();
+  const phone = document.getElementById('sp-phone').value.trim();
+  const nationalId = document.getElementById('sp-nid').value.trim();
+  const vehicleType = document.getElementById('sp-vehicle').value;
+  const plate = document.getElementById('sp-plate').value.trim();
+  const licenseExpiry = document.getElementById('sp-license-expiry').value;
+  const idCardFile = document.getElementById('sp-idcard').files[0];
+  const licenseFile = document.getElementById('sp-license').files[0];
+
   if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
   if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
+  if (!firstName || !lastName) { showToast('กรอกชื่อและนามสกุลให้ครบ'); return; }
+  if (!phone) { showToast('กรอกเบอร์โทรศัพท์'); return; }
+  if (!/^\d{13}$/.test(nationalId)) { showToast('เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก'); return; }
+  if (!vehicleType) { showToast('เลือกประเภทพาหนะ'); return; }
+  if (!plate) { showToast('กรอกป้ายทะเบียนรถ'); return; }
+  if (!idCardFile) { showToast('กรุณาแนบรูปบัตรประชาชน'); return; }
+  if (!licenseFile) { showToast('กรุณาแนบรูปใบขับขี่'); return; }
+
+  const submitBtn = document.getElementById('sp-submit-btn');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'กำลังสมัคร...'; }
   try {
     const email = usernameToEmail(username);
     const { data, error } = await supabaseClient.auth.signUp({ email, password });
     if (error) throw error;
-    if (!data.session) { showToast('สมัครไม่สำเร็จ: ต้องปิด "Confirm email" ใน Supabase ก่อน (ดู README)'); state.authMode = 'login'; render(); return; }
+    if (!data.session) { showToast('สมัครไม่สำเร็จ: ต้องปิด "Confirm email" ใน Supabase ก่อน (ดู README)'); if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'สมัครสมาชิก'; } return; }
     state.user = data.user;
+
+    const idCardPath = await uploadPrivateFile(state.user.id, idCardFile);
+    const licensePath = await uploadPrivateFile(state.user.id, licenseFile);
+    const { error: insErr } = await supabaseClient.from('riders').insert({
+      name: `${firstName} ${lastName}`, first_name: firstName, last_name: lastName,
+      phone, national_id: nationalId, vehicle_type: vehicleType, plate,
+      id_card_path: idCardPath, driving_license_path: licensePath,
+      driving_license_expiry: licenseExpiry || null,
+      owner_id: state.user.id, status: 'pending',
+    });
+    if (insErr) throw insErr;
+    showToast('สมัครสำเร็จ! กำลังรอแอดมินอนุมัติ');
     await afterLogin();
   } catch (err) {
     console.error(err);
     if (String(err.message||'').includes('already registered')) showToast('ชื่อผู้ใช้นี้มีคนใช้แล้ว ลองชื่ออื่น');
     else showToast('สมัครไม่สำเร็จ: ' + (err.message||''));
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'สมัครสมาชิก'; }
   }
 }
 async function doLogin(){
@@ -449,19 +482,66 @@ async function advanceJob(){
 /* ============ RENDER ============ */
 function authHtml(){
   const isSignup = state.authMode === 'signup';
+  if (!isSignup) {
+    return `
+    <div class="job-active-card" style="margin-top:60px;">
+      <div class="job-active-emoji">🏍️</div>
+      <div class="job-active-status">เข้าสู่ระบบไรเดอร์</div>
+      <div style="margin-top:16px;text-align:left;">
+        <div class="ff-label" style="margin-top:0;">ชื่อผู้ใช้</div>
+        <input id="auth-username" type="text" class="ff-input" placeholder="ชื่อผู้ใช้ของคุณ" autocomplete="username">
+        <div class="ff-label">รหัสผ่าน</div>
+        <input id="auth-password" type="password" class="ff-input" placeholder="รหัสผ่าน" autocomplete="current-password">
+      </div>
+      <button class="btn-accept" style="margin-top:16px;" onclick="doLogin()">เข้าสู่ระบบ</button>
+      <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--primary);" onclick="state.authMode='signup';render()">
+        ยังไม่มีบัญชี? สมัครใหม่
+      </button>
+    </div>`;
+  }
+  const vehicleOptions = VEHICLE_OPTIONS.map(v => `<option value="${v.id}">${v.label}</option>`).join('');
   return `
-  <div class="job-active-card" style="margin-top:60px;">
-    <div class="job-active-emoji">🏍️</div>
-    <div class="job-active-status">${isSignup ? 'สมัครเป็นไรเดอร์ใหม่' : 'เข้าสู่ระบบไรเดอร์'}</div>
-    <div style="margin-top:16px;text-align:left;">
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">ชื่อผู้ใช้</div>
-      <input id="auth-username" type="text" placeholder="ตั้งชื่อผู้ใช้ของคุณ" autocomplete="username" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin:12px 0 6px;">รหัสผ่าน</div>
-      <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+  <div class="job-active-card" style="text-align:left;margin-top:24px;">
+    <div style="text-align:center;">
+      <div class="job-active-emoji">🏍️</div>
+      <div class="job-active-status">สมัครเป็นไรเดอร์ — กรอกข้อมูลให้ครบ</div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">ข้อมูลทั้งหมดจะถูกส่งให้แอดมินตรวจสอบก่อนเริ่มรับงาน</p>
     </div>
-    <button class="btn-accept" style="margin-top:16px;" onclick="${isSignup ? 'doSignup()' : 'doLogin()'}">${isSignup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
-    <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--primary);" onclick="state.authMode='${isSignup ? 'login' : 'signup'}';render()">
-      ${isSignup ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครใหม่'}
+
+    <div class="ff-section">บัญชีผู้ใช้</div>
+    <div class="ff-label" style="margin-top:0;">ชื่อผู้ใช้</div>
+    <input id="auth-username" type="text" class="ff-input" placeholder="ตั้งชื่อผู้ใช้ของคุณ" autocomplete="username">
+    <div class="ff-label">รหัสผ่าน</div>
+    <input id="auth-password" type="password" class="ff-input" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
+
+    <div class="ff-section">ข้อมูลส่วนตัวและเอกสาร</div>
+    <div class="ff-row">
+      <div><div class="ff-label">ชื่อ</div><input id="sp-first" class="ff-input" placeholder="ชื่อจริง"></div>
+      <div><div class="ff-label">นามสกุล</div><input id="sp-last" class="ff-input" placeholder="นามสกุล"></div>
+    </div>
+    <div class="ff-label">เบอร์โทรศัพท์</div>
+    <input id="sp-phone" class="ff-input" type="tel" placeholder="08xxxxxxxx">
+    <div class="ff-label">เลขบัตรประชาชน (13 หลัก)</div>
+    <input id="sp-nid" class="ff-input" inputmode="numeric" maxlength="13" placeholder="1234567890123">
+    <div class="ff-label">ภาพถ่ายบัตรประชาชน (เห็นหน้าบัตรชัดเจน ไม่สะท้อนแสง)</div>
+    <input id="sp-idcard" type="file" accept="image/*" class="ff-input" onchange="previewFileTo('sp-idcard','sp-idcard-preview')">
+    <img id="sp-idcard-preview" class="ff-img-preview">
+    <div class="ff-label">ภาพถ่ายใบขับขี่</div>
+    <input id="sp-license" type="file" accept="image/*" class="ff-input" onchange="previewFileTo('sp-license','sp-license-preview')">
+    <img id="sp-license-preview" class="ff-img-preview">
+    <div class="ff-label">วันหมดอายุใบขับขี่</div>
+    <input id="sp-license-expiry" type="date" class="ff-input">
+    <p class="ff-hint">🔒 รูปเอกสารถูกเก็บแบบส่วนตัว มีแต่คุณและแอดมินเท่านั้นที่เปิดดูได้</p>
+
+    <div class="ff-section">ข้อมูลยานพาหนะ</div>
+    <div class="ff-label">ประเภทพาหนะ</div>
+    <select id="sp-vehicle" class="ff-input"><option value="">— เลือกประเภทพาหนะ —</option>${vehicleOptions}</select>
+    <div class="ff-label">ป้ายทะเบียนรถ</div>
+    <input id="sp-plate" class="ff-input" placeholder="เช่น 1กข 1234 กทม.">
+
+    <button class="btn-accept" id="sp-submit-btn" style="margin-top:18px;" onclick="doSignup()">สมัครสมาชิก</button>
+    <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--primary);" onclick="state.authMode='login';render()">
+      มีบัญชีแล้ว? เข้าสู่ระบบ
     </button>
   </div>`;
 }
