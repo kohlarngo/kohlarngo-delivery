@@ -72,6 +72,16 @@
   .stat-card .delta{font-size:11.5px;margin-top:4px;font-weight:700;color:var(--green);}
 
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);}
+  .detail-overlay{position:fixed;inset:0;background:rgba(15,20,23,.5);z-index:80;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .detail-modal{background:var(--bg);width:100%;max-width:520px;max-height:86vh;overflow-y:auto;border-radius:16px;padding:20px;}
+  .detail-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .detail-close{border:none;background:var(--surface-2);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;}
+  .detail-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
+  .detail-row .lbl{color:var(--text-muted);flex-shrink:0;}
+  .detail-row .val{text-align:right;font-weight:600;}
+  .detail-section{font-size:12.5px;font-weight:800;color:var(--primary);margin:16px 0 4px;}
+  .detail-img{width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;}
+  .btn-doc{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--primary);padding:9px;border-radius:8px;font-weight:700;font-size:12px;margin-top:8px;cursor:pointer;}
   .panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);}
   .panel-head h2{font-size:15px;}
   .two-col{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
@@ -135,6 +145,18 @@ let restFilter = 'all';
 let sidebarOpen = false;
 let loading = true;
 let realtimeChannel = null;
+let activeDetail = null; // { type: 'restaurant'|'rider', id }
+function openDetail(type, id){ activeDetail = { type, id }; render(); }
+function closeDetail(){ activeDetail = null; render(); }
+async function viewPrivateDoc(path){
+  if (!path) { showToast('ยังไม่มีเอกสารนี้'); return; }
+  try {
+    const { data, error } = await supabaseClient.storage.from('verification-docs').createSignedUrl(path, 300);
+    if (error) throw error;
+    window.open(data.signedUrl, '_blank');
+  } catch (err) { console.error(err); showToast('เปิดเอกสารไม่สำเร็จ'); }
+}
+function mapsLink(lat, lng){ return `https://www.google.com/maps?q=${lat},${lng}`; }
 let adminView = 'loading'; // loading | auth | denied | dashboard
 let currentAdminEmail = null;
 
@@ -241,14 +263,14 @@ async function refreshRestaurants(){
     if (error) throw error;
     const { data: ord } = await supabaseClient.from('orders').select('restaurant_id').eq('status','delivered');
     const counts = {}; (ord||[]).forEach(o=>{ if (o.restaurant_id) counts[o.restaurant_id]=(counts[o.restaurant_id]||0)+1; });
-    restaurants = (data||[]).map(r => ({ id:r.id, name:r.name, cat:r.category||'-', status:r.status, rating:r.rating||0, orders:counts[r.id]||0, emoji:r.emoji||'🍽️' }));
+    restaurants = (data||[]).map(r => ({ id:r.id, name:r.name, cat:r.category||'-', status:r.status, rating:r.rating||0, orders:counts[r.id]||0, emoji:r.emoji||'🍽️', raw:r }));
   } catch (err) { console.warn('refreshRestaurants failed', err); }
 }
 async function refreshRiders(){
   try {
     const { data, error } = await supabaseClient.from('riders').select('*').order('created_at', { ascending: false });
     if (error) throw error;
-    riders = (data||[]).map(r => ({ id:r.id, name:r.name, status:r.status, trips:r.total_trips||0, rating:r.rating||0, todayTrips:0 }));
+    riders = (data||[]).map(r => ({ id:r.id, name:r.name, status:r.status, trips:r.total_trips||0, rating:r.rating||0, todayTrips:0, raw:r }));
     const start = new Date(); start.setHours(0,0,0,0);
     const { data: ord } = await supabaseClient.from('orders').select('rider_id').eq('status','delivered').gte('created_at', start.toISOString());
     const counts = {}; (ord||[]).forEach(o=>{ if (o.rider_id) counts[o.rider_id]=(counts[o.rider_id]||0)+1; });
@@ -400,6 +422,56 @@ function renderOverview(){
   </div>`;
 }
 
+/* ============ รายละเอียด KYC (ร้านค้า/ไรเดอร์) ============ */
+const VEHICLE_LABEL = { motorcycle: 'รถจักรยานยนต์', car: 'รถยนต์', bicycle: 'จักรยาน' };
+function restaurantDetailHtml(r){
+  const raw = r.raw || {};
+  return `
+  <div class="detail-overlay" onclick="if(event.target===this) closeDetail()">
+    <div class="detail-modal">
+      <div class="detail-title"><h2 style="font-size:16px;">${r.emoji} ${r.name}</h2><button class="detail-close" onclick="closeDetail()">✕</button></div>
+      ${raw.storefront_url ? `<img class="detail-img" src="${raw.storefront_url}">` : ''}
+      <div class="detail-section">ข้อมูลร้านค้า</div>
+      <div class="detail-row"><span class="lbl">ชื่อ (EN)</span><span class="val">${raw.name_en || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">ประเภท</span><span class="val">${raw.tags || r.cat}</span></div>
+      <div class="detail-row"><span class="lbl">เบอร์โทรร้าน</span><span class="val">${raw.phone || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">ที่อยู่</span><span class="val">${raw.address || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">พิกัด</span><span class="val">${raw.lat && raw.lng ? `<a href="${mapsLink(raw.lat, raw.lng)}" target="_blank">เปิดใน Google Maps</a>` : '—'}</span></div>
+      <div class="detail-row"><span class="lbl">พร้อมเพย์</span><span class="val">${raw.promptpay_id || '—'}</span></div>
+      <div class="detail-section">เจ้าของร้าน</div>
+      <div class="detail-row"><span class="lbl">ชื่อ-นามสกุล</span><span class="val">${(raw.owner_first_name||'')+' '+(raw.owner_last_name||'') || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">เบอร์โทร</span><span class="val">${raw.owner_phone || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">เลขบัตรประชาชน</span><span class="val">${raw.owner_national_id || '—'}</span></div>
+      <button class="btn-doc" onclick="viewPrivateDoc('${raw.owner_id_card_path||''}')">📄 ดูรูปบัตรประชาชนเจ้าของร้าน</button>
+      <div class="detail-section">สถานะ</div>
+      <div class="detail-row"><span class="lbl">สถานะร้าน</span><span class="val"><span class="tag ${r.status}">${REST_TAG_LABEL[r.status]}</span></span></div>
+      ${r.status==='pending' ? `<button class="btn-mini approve" style="width:100%;margin-top:10px;" onclick="approveRest('${r.id}');closeDetail()">อนุมัติร้านนี้</button>` : ''}
+    </div>
+  </div>`;
+}
+function riderDetailHtml(r){
+  const raw = r.raw || {};
+  return `
+  <div class="detail-overlay" onclick="if(event.target===this) closeDetail()">
+    <div class="detail-modal">
+      <div class="detail-title"><h2 style="font-size:16px;">🏍️ ${r.name}</h2><button class="detail-close" onclick="closeDetail()">✕</button></div>
+      <div class="detail-section">ข้อมูลส่วนตัว</div>
+      <div class="detail-row"><span class="lbl">ชื่อ-นามสกุล</span><span class="val">${(raw.first_name||'')+' '+(raw.last_name||'') || raw.name || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">เบอร์โทร</span><span class="val">${raw.phone || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">เลขบัตรประชาชน</span><span class="val">${raw.national_id || '—'}</span></div>
+      <button class="btn-doc" onclick="viewPrivateDoc('${raw.id_card_path||''}')">📄 ดูรูปบัตรประชาชน</button>
+      <div class="detail-section">ยานพาหนะ</div>
+      <div class="detail-row"><span class="lbl">ประเภท</span><span class="val">${VEHICLE_LABEL[raw.vehicle_type] || raw.vehicle_type || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">ทะเบียนรถ</span><span class="val">${raw.plate || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">วันหมดอายุใบขับขี่</span><span class="val">${raw.driving_license_expiry || '—'}</span></div>
+      <button class="btn-doc" onclick="viewPrivateDoc('${raw.driving_license_path||''}')">📄 ดูรูปใบขับขี่</button>
+      <div class="detail-section">สถานะ</div>
+      <div class="detail-row"><span class="lbl">สถานะบัญชี</span><span class="val"><span class="tag ${r.status==='pending'?'pending':(r.status==='online'?'online':'offline')}">${RIDER_TAG[r.status]}</span></span></div>
+      ${r.status==='pending' ? `<button class="btn-mini approve" style="width:100%;margin-top:10px;" onclick="approveRider('${r.id}');closeDetail()">อนุมัติไรเดอร์นี้</button>` : ''}
+    </div>
+  </div>`;
+}
+
 /* ============ RESTAURANTS ============ */
 async function approveRest(id){
   if (dataSource==='mock'){ const r=restaurants.find(x=>x.id===id); r.status='active'; showToast('อนุมัติร้าน '+r.name+' แล้ว'); render(); return; }
@@ -438,6 +510,7 @@ function renderRestaurants(){
               <td>${r.orders.toLocaleString('th-TH')}</td>
               <td><span class="tag ${r.status}">${REST_TAG_LABEL[r.status]}</span></td>
               <td>
+                <button class="btn-mini outline" onclick="openDetail('restaurant','${r.id}')">รายละเอียด</button>
                 ${r.status==='pending' ? `<button class="btn-mini approve" onclick="approveRest('${r.id}')">อนุมัติ</button>` : ''}
                 ${r.status==='active' ? `<button class="btn-mini suspend" onclick="suspendRest('${r.id}')">ระงับ</button>` : ''}
                 ${r.status==='suspended' ? `<button class="btn-mini approve" onclick="reactivateRest('${r.id}')">เปิดใช้งาน</button>` : ''}
@@ -480,6 +553,7 @@ function renderRiders(){
               <td>${r.trips.toLocaleString('th-TH')}</td>
               <td>${r.todayTrips}</td>
               <td>
+                <button class="btn-mini outline" onclick="openDetail('rider','${r.id}')">รายละเอียด</button>
                 ${r.status==='pending' ? `<button class="btn-mini approve" onclick="approveRider('${r.id}')">อนุมัติ</button>` : `<button class="btn-mini outline" onclick="suspendRider('${r.id}')">ระงับ</button>`}
               </td>
             </tr>`).join('')}
@@ -602,12 +676,23 @@ function render(){
   if (activePage==='orders') page = renderOrders();
   if (activePage==='finance') page = renderFinance();
   const sbHtml = sidebarHtml().replace('class="sidebar"', `class="sidebar${sidebarOpen?' open':''}"`);
+  let detailHtml = '';
+  if (activeDetail) {
+    if (activeDetail.type === 'restaurant') {
+      const r = restaurants.find(x => x.id === activeDetail.id);
+      if (r) detailHtml = restaurantDetailHtml(r);
+    } else if (activeDetail.type === 'rider') {
+      const r = riders.find(x => x.id === activeDetail.id);
+      if (r) detailHtml = riderDetailHtml(r);
+    }
+  }
   app.innerHTML = `
     <div class="shell">
       <div class="sidebar-backdrop ${sidebarOpen?'show':''}" onclick="closeSidebar()"></div>
       ${sbHtml}
       <div class="main">${page}</div>
-    </div>`;
+    </div>
+    ${detailHtml}`;
 }
 init();
 </script>

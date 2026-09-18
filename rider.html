@@ -72,6 +72,13 @@
   .empty-state h3{font-size:15px;color:var(--text);margin-bottom:6px;}
 
   .job-active-card{margin:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-l);padding:20px;text-align:center;}
+  .ff-label{font-size:12px;font-weight:700;color:var(--text-muted);margin:12px 0 6px;text-align:left;}
+  .ff-input, select.ff-input{width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;}
+  .ff-row{display:flex;gap:10px;}
+  .ff-row .ff-input{flex:1;}
+  .ff-section{font-size:13px;font-weight:800;color:var(--primary);text-align:left;margin:20px 0 4px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+  .ff-img-preview{display:none;width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-top:8px;}
+  .ff-hint{font-size:11px;color:var(--text-muted);margin-top:6px;text-align:left;}
   .job-active-emoji{font-size:48px;}
   .job-active-status{font-size:17px;font-weight:800;font-family:'Archivo Black';margin-top:8px;}
   .job-active-sub{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
@@ -128,6 +135,13 @@ function showToast(msg){
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove('show'),1700);
 }
+function usernameToEmail(username) {
+  const norm = username.trim().toLowerCase();
+  let hash = 5381;
+  for (let i = 0; i < norm.length; i++) { hash = ((hash << 5) + hash + norm.charCodeAt(i)) >>> 0; }
+  const slug = norm.replace(/[^a-z0-9]/g, '').slice(0, 20) || 'u';
+  return `${slug}${hash.toString(36)}@riders.imduan.internal`;
+}
 
 /* ============ MOCK DATA (fallback เมื่อยังไม่เชื่อม Supabase) ============ */
 const RESTAURANTS_MOCK = ['ส้มตำแซ่บนัว','ก๋วยเตี๋ยวเรือป้าแดง','ครัวไทยแท้ ป้าอำนวย','ปังปิ้ง & ชานมไข่มุก','พิซซ่า อิตาเลียนโน'];
@@ -165,26 +179,33 @@ async function afterLogin(){
     await refreshAll();
     state.view = 'jobs'; render();
     subscribeOrders();
+    ensureNotificationPermission();
   } catch (err) { console.error(err); showToast('โหลดข้อมูลไม่สำเร็จ'); }
 }
 async function doSignup(){
-  const email = document.getElementById('auth-email').value.trim();
+  const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
-  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
   if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
   try {
+    const email = usernameToEmail(username);
     const { data, error } = await supabaseClient.auth.signUp({ email, password });
     if (error) throw error;
-    if (!data.session) { showToast('สมัครสำเร็จ! กรุณายืนยันอีเมลที่ส่งไปให้ แล้วกลับมาเข้าสู่ระบบ'); state.authMode = 'login'; render(); return; }
+    if (!data.session) { showToast('สมัครไม่สำเร็จ: ต้องปิด "Confirm email" ใน Supabase ก่อน (ดู README)'); state.authMode = 'login'; render(); return; }
     state.user = data.user;
     await afterLogin();
-  } catch (err) { console.error(err); showToast('สมัครไม่สำเร็จ: ' + (err.message||'')); }
+  } catch (err) {
+    console.error(err);
+    if (String(err.message||'').includes('already registered')) showToast('ชื่อผู้ใช้นี้มีคนใช้แล้ว ลองชื่ออื่น');
+    else showToast('สมัครไม่สำเร็จ: ' + (err.message||''));
+  }
 }
 async function doLogin(){
-  const email = document.getElementById('auth-email').value.trim();
+  const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
-  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
   try {
+    const email = usernameToEmail(username);
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
     state.user = data.user;
@@ -198,16 +219,64 @@ async function doLogout(){
   state = { view:'auth', authMode:'login', user:null, riderId:null, riderName:'', riderPlate:'', online:false, availableJobs:[], activeJob:null, todayEarnings:0, todayTrips:0 };
   render();
 }
+const VEHICLE_OPTIONS = [
+  { id: 'motorcycle', label: 'รถจักรยานยนต์' }, { id: 'car', label: 'รถยนต์' }, { id: 'bicycle', label: 'จักรยาน' },
+];
+function previewFileTo(inputId, imgId){
+  const input = document.getElementById(inputId);
+  const img = document.getElementById(imgId);
+  const file = input.files && input.files[0];
+  if (!file || !img) return;
+  const reader = new FileReader();
+  reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(file);
+}
+async function uploadPrivateFile(pathPrefix, file){
+  const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+  const path = `${pathPrefix}/${Date.now()}_${safeName}`;
+  const { error } = await supabaseClient.storage.from('verification-docs').upload(path, file);
+  if (error) throw error;
+  return path; // เก็บแค่ path ไว้ ไม่ใช่ url สาธารณะ (บักเก็ตนี้ปิดอยู่)
+}
 async function submitProfile(){
-  const name = document.getElementById('sp-name').value.trim();
+  const firstName = document.getElementById('sp-first').value.trim();
+  const lastName = document.getElementById('sp-last').value.trim();
+  const phone = document.getElementById('sp-phone').value.trim();
+  const nationalId = document.getElementById('sp-nid').value.trim();
+  const vehicleType = document.getElementById('sp-vehicle').value;
   const plate = document.getElementById('sp-plate').value.trim();
-  if (!name || !plate) { showToast('กรอกชื่อและทะเบียนรถให้ครบ'); return; }
+  const licenseExpiry = document.getElementById('sp-license-expiry').value;
+  const idCardFile = document.getElementById('sp-idcard').files[0];
+  const licenseFile = document.getElementById('sp-license').files[0];
+
+  if (!firstName || !lastName) { showToast('กรอกชื่อและนามสกุลให้ครบ'); return; }
+  if (!phone) { showToast('กรอกเบอร์โทรศัพท์'); return; }
+  if (!/^\d{13}$/.test(nationalId)) { showToast('เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก'); return; }
+  if (!vehicleType) { showToast('เลือกประเภทพาหนะ'); return; }
+  if (!plate) { showToast('กรอกป้ายทะเบียนรถ'); return; }
+  if (!idCardFile) { showToast('กรุณาแนบรูปบัตรประชาชน'); return; }
+  if (!licenseFile) { showToast('กรุณาแนบรูปใบขับขี่'); return; }
+
+  const submitBtn = document.getElementById('sp-submit-btn');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'กำลังอัปโหลด...'; }
   try {
-    const { error } = await supabaseClient.from('riders').insert({ name, plate, owner_id: state.user.id, status: 'pending' });
+    const idCardPath = await uploadPrivateFile(state.user.id, idCardFile);
+    const licensePath = await uploadPrivateFile(state.user.id, licenseFile);
+    const { error } = await supabaseClient.from('riders').insert({
+      name: `${firstName} ${lastName}`, first_name: firstName, last_name: lastName,
+      phone, national_id: nationalId, vehicle_type: vehicleType, plate,
+      id_card_path: idCardPath, driving_license_path: licensePath,
+      driving_license_expiry: licenseExpiry || null,
+      owner_id: state.user.id, status: 'pending',
+    });
     if (error) throw error;
     showToast('บันทึกโปรไฟล์แล้ว กำลังรอแอดมินอนุมัติ');
     await afterLogin();
-  } catch (err) { console.error(err); showToast('บันทึกไม่สำเร็จ: ' + (err.message||'')); }
+  } catch (err) {
+    console.error(err);
+    showToast('บันทึกไม่สำเร็จ: ' + (err.message||''));
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'บันทึกและส่งขออนุมัติ'; }
+  }
 }
 
 /* ============ DATA REFRESH (Supabase) ============ */
@@ -255,12 +324,49 @@ async function refreshTodayStats(){
     state.todayEarnings = (data||[]).reduce((s,o)=>s+Number(o.delivery_fee||0),0);
   } catch (err) { console.warn('refreshTodayStats failed', err); }
 }
+
+/* ============ แจ้งเตือนงานใหม่ (เสียง + Notification เบราว์เซอร์) ============ */
+let sharedAudioCtx = null;
+function playAlertSound(){
+  try {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+    const ctx = sharedAudioCtx;
+    const now = ctx.currentTime;
+    [0, 0.18, 0.36].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.35, now + t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now + t); osc.stop(now + t + 0.16);
+    });
+  } catch (e) { console.warn('เล่นเสียงไม่ได้', e); }
+}
+function ensureNotificationPermission(){
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') Notification.requestPermission();
+}
+function showBrowserNotification(title, body){
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try { new Notification(title, { body }); } catch (e) { console.warn(e); }
+}
+
 function subscribeOrders(){
   if (!supabaseClient || ordersChannel) return;
   ordersChannel = supabaseClient
     .channel('rider_orders_watch')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
       if (state.view !== 'jobs') return;
+      const newJobAvailable = payload.new && payload.new.status === 'ready' && !payload.new.rider_id;
+      if (newJobAvailable && state.online && !state.activeJob) {
+        playAlertSound();
+        showBrowserNotification('🔔 มีงานใหม่เข้ามา!', 'มีออเดอร์พร้อมส่งรอไรเดอร์รับ');
+        showToast('🔔 มีงานใหม่เข้ามา!');
+      }
       await refreshAll(); render();
     })
     .subscribe();
@@ -348,10 +454,10 @@ function authHtml(){
     <div class="job-active-emoji">🏍️</div>
     <div class="job-active-status">${isSignup ? 'สมัครเป็นไรเดอร์ใหม่' : 'เข้าสู่ระบบไรเดอร์'}</div>
     <div style="margin-top:16px;text-align:left;">
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">อีเมล</div>
-      <input id="auth-email" type="email" placeholder="rider@email.com" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">ชื่อผู้ใช้</div>
+      <input id="auth-username" type="text" placeholder="ตั้งชื่อผู้ใช้ของคุณ" autocomplete="username" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
       <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin:12px 0 6px;">รหัสผ่าน</div>
-      <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+      <input id="auth-password" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
     </div>
     <button class="btn-accept" style="margin-top:16px;" onclick="${isSignup ? 'doSignup()' : 'doLogin()'}">${isSignup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
     <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--primary);" onclick="state.authMode='${isSignup ? 'login' : 'signup'}';render()">
@@ -360,17 +466,41 @@ function authHtml(){
   </div>`;
 }
 function setupProfileHtml(){
+  const vehicleOptions = VEHICLE_OPTIONS.map(v => `<option value="${v.id}">${v.label}</option>`).join('');
   return `
-  <div class="job-active-card" style="margin-top:60px;">
-    <div class="job-active-emoji">📝</div>
-    <div class="job-active-status">ตั้งค่าโปรไฟล์ไรเดอร์</div>
-    <div style="margin-top:16px;text-align:left;">
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">ชื่อ-นามสกุล</div>
-      <input id="sp-name" placeholder="เช่น เอกชัย ใจดี" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin:12px 0 6px;">ทะเบียนรถ</div>
-      <input id="sp-plate" placeholder="เช่น กท 4521" style="width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;">
+  <div class="job-active-card" style="text-align:left;margin-top:24px;">
+    <div style="text-align:center;">
+      <div class="job-active-emoji">📝</div>
+      <div class="job-active-status">สมัครเป็นไรเดอร์ — กรอกข้อมูลให้ครบ</div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">ข้อมูลทั้งหมดจะถูกส่งให้แอดมินตรวจสอบก่อนเริ่มรับงาน</p>
     </div>
-    <button class="btn-accept" style="margin-top:16px;" onclick="submitProfile()">บันทึกและส่งขออนุมัติ</button>
+
+    <div class="ff-section">ข้อมูลส่วนตัวและเอกสาร</div>
+    <div class="ff-row">
+      <div><div class="ff-label">ชื่อ</div><input id="sp-first" class="ff-input" placeholder="ชื่อจริง"></div>
+      <div><div class="ff-label">นามสกุล</div><input id="sp-last" class="ff-input" placeholder="นามสกุล"></div>
+    </div>
+    <div class="ff-label">เบอร์โทรศัพท์</div>
+    <input id="sp-phone" class="ff-input" type="tel" placeholder="08xxxxxxxx">
+    <div class="ff-label">เลขบัตรประชาชน (13 หลัก)</div>
+    <input id="sp-nid" class="ff-input" inputmode="numeric" maxlength="13" placeholder="1234567890123">
+    <div class="ff-label">ภาพถ่ายบัตรประชาชน (เห็นหน้าบัตรชัดเจน ไม่สะท้อนแสง)</div>
+    <input id="sp-idcard" type="file" accept="image/*" class="ff-input" onchange="previewFileTo('sp-idcard','sp-idcard-preview')">
+    <img id="sp-idcard-preview" class="ff-img-preview">
+    <div class="ff-label">ภาพถ่ายใบขับขี่</div>
+    <input id="sp-license" type="file" accept="image/*" class="ff-input" onchange="previewFileTo('sp-license','sp-license-preview')">
+    <img id="sp-license-preview" class="ff-img-preview">
+    <div class="ff-label">วันหมดอายุใบขับขี่</div>
+    <input id="sp-license-expiry" type="date" class="ff-input">
+    <p class="ff-hint">🔒 รูปเอกสารถูกเก็บแบบส่วนตัว มีแต่คุณและแอดมินเท่านั้นที่เปิดดูได้</p>
+
+    <div class="ff-section">ข้อมูลยานพาหนะ</div>
+    <div class="ff-label">ประเภทพาหนะ</div>
+    <select id="sp-vehicle" class="ff-input"><option value="">— เลือกประเภทพาหนะ —</option>${vehicleOptions}</select>
+    <div class="ff-label">ป้ายทะเบียนรถ</div>
+    <input id="sp-plate" class="ff-input" placeholder="เช่น 1กข 1234 กทม.">
+
+    <button class="btn-accept" id="sp-submit-btn" style="margin-top:18px;" onclick="submitProfile()">บันทึกและส่งขออนุมัติ</button>
     <button class="btn-accept" style="margin-top:8px;background:transparent;color:var(--red, #C0392B);" onclick="doLogout()">ออกจากระบบ</button>
   </div>`;
 }

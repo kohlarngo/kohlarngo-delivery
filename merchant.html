@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
     --bg:#EEF3F6; --surface:#FFFFFF; --surface-2:#F5F8FA; --text:#171E24; --text-muted:#66747E;
@@ -83,6 +85,13 @@
   .f-label{font-size:12px;font-weight:700;color:var(--text-muted);text-align:left;margin:14px 0 6px;}
   .f-input, select.f-input{width:100%;border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;box-sizing:border-box;}
   .btn-primary{margin-top:16px;width:100%;background:var(--primary);color:var(--primary-ink);border:none;padding:13px;border-radius:999px;font-weight:800;font-size:13.5px;}
+  .form-section-title{font-size:13px;font-weight:800;color:var(--primary);text-align:left;margin:22px 0 4px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+  .field-row{display:flex;gap:10px;}
+  .field-row .f-input{flex:1;}
+  .img-preview{display:none;width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-top:8px;}
+  #profile-map{width:100%;height:200px;border-radius:10px;margin-top:8px;border:1px solid var(--border);}
+  .btn-outline-mini{width:100%;background:var(--surface-2);color:var(--primary);border:1px solid var(--border);padding:9px;border-radius:8px;font-weight:700;font-size:12px;margin-top:8px;}
+  .coords-label{font-size:11.5px;color:var(--text-muted);margin-top:6px;text-align:left;}
 
   .fab-add{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;width:calc(100% - 36px);max-width:484px;background:var(--primary);color:var(--primary-ink);border:none;padding:13px;border-radius:999px;font-weight:800;font-size:13.5px;box-shadow:0 8px 20px rgba(42,111,151,.35);}
   .overlay{position:fixed;inset:0;background:rgba(15,20,23,.5);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
@@ -129,6 +138,15 @@ function showToast(msg){
 }
 function money(n){ return Number(n||0).toLocaleString('th-TH') + ' บาท'; }
 
+/* ============ USERNAME -> รหัสอีเมลภายใน (ผู้ใช้ไม่ต้องมีอีเมลจริง) ============ */
+function usernameToEmail(username) {
+  const norm = username.trim().toLowerCase();
+  let hash = 5381;
+  for (let i = 0; i < norm.length; i++) { hash = ((hash << 5) + hash + norm.charCodeAt(i)) >>> 0; }
+  const slug = norm.replace(/[^a-z0-9]/g, '').slice(0, 20) || 'u';
+  return `${slug}${hash.toString(36)}@merchants.imduan.internal`;
+}
+
 /* ============ AUTH / INIT ============ */
 async function init(){
   if (!supabaseClient) { state.view = 'needs-config'; render(); return; }
@@ -148,26 +166,33 @@ async function afterLogin(){
     await refreshOrders(); await refreshMenu();
     state.view = 'dashboard'; render();
     subscribeOrders();
+    ensureNotificationPermission();
   } catch (err) { console.error(err); showToast('โหลดข้อมูลไม่สำเร็จ'); }
 }
 async function doSignup(){
-  const email = document.getElementById('auth-email').value.trim();
+  const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
-  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
   if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
   try {
+    const email = usernameToEmail(username);
     const { data, error } = await supabaseClient.auth.signUp({ email, password });
     if (error) throw error;
-    if (!data.session) { showToast('สมัครสำเร็จ! กรุณายืนยันอีเมลที่ส่งไปให้ แล้วกลับมาเข้าสู่ระบบ'); state.authMode = 'login'; render(); return; }
+    if (!data.session) { showToast('สมัครไม่สำเร็จ: ต้องปิด "Confirm email" ใน Supabase ก่อน (ดู README)'); state.authMode = 'login'; render(); return; }
     state.user = data.user;
     await afterLogin();
-  } catch (err) { console.error(err); showToast('สมัครไม่สำเร็จ: ' + (err.message||'')); }
+  } catch (err) {
+    console.error(err);
+    if (String(err.message||'').includes('already registered')) showToast('ชื่อผู้ใช้นี้มีคนใช้แล้ว ลองชื่ออื่น');
+    else showToast('สมัครไม่สำเร็จ: ' + (err.message||''));
+  }
 }
 async function doLogin(){
-  const email = document.getElementById('auth-email').value.trim();
+  const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
-  if (!email || !password) { showToast('กรอกอีเมลและรหัสผ่าน'); return; }
+  if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
   try {
+    const email = usernameToEmail(username);
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
     state.user = data.user;
@@ -180,18 +205,107 @@ async function doLogout(){
   state = { view:'auth', authMode:'login', user:null, restaurant:null, restaurantId:null, tab:'new', newOrders:[], preparingOrders:[], readyOrders:[], menu:[] };
   render();
 }
+const CATEGORY_OPTIONS = [
+  { id: 'isaan', label: 'ส้มตำ/อีสาน' }, { id: 'noodle', label: 'ก๋วยเตี๋ยว' }, { id: 'thai', label: 'อาหารไทย' },
+  { id: 'dessert', label: 'ของหวาน/เครื่องดื่ม' }, { id: 'bakery', label: 'เบเกอรี่' }, { id: 'pizza', label: 'พิซซ่า/พาสต้า' },
+  { id: 'japanese', label: 'ญี่ปุ่น' }, { id: 'fastfood', label: 'ฟาสต์ฟู้ด' }, { id: 'other', label: 'อื่นๆ' },
+];
+let profileMap = null, profileMarker = null;
+function initProfileMap(){
+  const el = document.getElementById('profile-map');
+  if (!el || typeof L === 'undefined' || profileMap) return;
+  profileMap = L.map('profile-map').setView([13.7563, 100.5018], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(profileMap);
+  profileMap.on('click', (e) => setProfileMarker(e.latlng.lat, e.latlng.lng));
+}
+function setProfileMarker(lat, lng){
+  if (!profileMarker) profileMarker = L.marker([lat, lng]).addTo(profileMap);
+  else profileMarker.setLatLng([lat, lng]);
+  profileMap.setView([lat, lng], 15);
+  document.getElementById('sp-lat').value = lat.toFixed(6);
+  document.getElementById('sp-lng').value = lng.toFixed(6);
+  const lbl = document.getElementById('map-coords-label');
+  if (lbl) lbl.textContent = `📍 พิกัดที่เลือก: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+function useCurrentLocationForProfile(){
+  if (!('geolocation' in navigator)) { showToast('อุปกรณ์นี้ไม่รองรับ GPS'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => setProfileMarker(pos.coords.latitude, pos.coords.longitude),
+    () => showToast('ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตสิทธิ์ GPS')
+  );
+}
+function previewFileTo(inputId, imgId){
+  const input = document.getElementById(inputId);
+  const img = document.getElementById(imgId);
+  const file = input.files && input.files[0];
+  if (!file || !img) return;
+  const reader = new FileReader();
+  reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(file);
+}
+async function uploadPublicFile(bucket, pathPrefix, file){
+  const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+  const path = `${pathPrefix}/${Date.now()}_${safeName}`;
+  const { error } = await supabaseClient.storage.from(bucket).upload(path, file);
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+async function uploadPrivateFile(pathPrefix, file){
+  const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+  const path = `${pathPrefix}/${Date.now()}_${safeName}`;
+  const { error } = await supabaseClient.storage.from('verification-docs').upload(path, file);
+  if (error) throw error;
+  return path; // เก็บแค่ path ไว้ ไม่ใช่ url สาธารณะ (บักเก็ตนี้ปิดอยู่)
+}
 async function submitProfile(){
-  const name = document.getElementById('sp-name').value.trim();
-  const category = document.getElementById('sp-cat').value.trim();
-  const emoji = document.getElementById('sp-emoji').value.trim() || '🍽️';
-  const tags = document.getElementById('sp-tags').value.trim();
-  if (!name) { showToast('กรอกชื่อร้าน'); return; }
+  const nameTh = document.getElementById('sp-name').value.trim();
+  const nameEn = document.getElementById('sp-name-en').value.trim();
+  const category = document.getElementById('sp-cat').value;
+  const phone = document.getElementById('sp-phone').value.trim();
+  const address = document.getElementById('sp-address').value.trim();
+  const lat = document.getElementById('sp-lat').value;
+  const lng = document.getElementById('sp-lng').value;
+  const ownerFirst = document.getElementById('sp-owner-first').value.trim();
+  const ownerLast = document.getElementById('sp-owner-last').value.trim();
+  const ownerPhone = document.getElementById('sp-owner-phone').value.trim();
+  const ownerNid = document.getElementById('sp-owner-nid').value.trim();
+  const promptpay = document.getElementById('sp-promptpay').value.trim();
+  const storefrontFile = document.getElementById('sp-storefront').files[0];
+  const idCardFile = document.getElementById('sp-owner-idcard').files[0];
+
+  if (!nameTh) { showToast('กรอกชื่อร้าน (ภาษาไทย)'); return; }
+  if (!category) { showToast('เลือกประเภทร้านค้า'); return; }
+  if (!phone) { showToast('กรอกเบอร์โทรร้านค้า'); return; }
+  if (!ownerFirst || !ownerLast) { showToast('กรอกชื่อ-นามสกุลเจ้าของร้าน'); return; }
+  if (!/^\d{13}$/.test(ownerNid)) { showToast('เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก'); return; }
+  if (!idCardFile) { showToast('กรุณาแนบรูปบัตรประชาชนเจ้าของร้าน'); return; }
+
+  const submitBtn = document.getElementById('sp-submit-btn');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'กำลังอัปโหลด...'; }
   try {
-    const { error } = await supabaseClient.from('restaurants').insert({ name, category, emoji, tags, owner_id: state.user.id, status: 'pending' });
+    const catInfo = CATEGORY_OPTIONS.find(c => c.id === category);
+    let storefrontUrl = null;
+    if (storefrontFile) storefrontUrl = await uploadPublicFile('storefront-images', state.user.id, storefrontFile);
+    const idCardPath = await uploadPrivateFile(state.user.id, idCardFile);
+
+    const { error } = await supabaseClient.from('restaurants').insert({
+      name: nameTh, name_en: nameEn || null, category, tags: catInfo ? catInfo.label : '',
+      phone, address, lat: lat ? Number(lat) : null, lng: lng ? Number(lng) : null,
+      storefront_url: storefrontUrl,
+      owner_first_name: ownerFirst, owner_last_name: ownerLast, owner_phone: ownerPhone,
+      owner_national_id: ownerNid, owner_id_card_path: idCardPath,
+      promptpay_id: promptpay || null,
+      owner_id: state.user.id, status: 'pending',
+    });
     if (error) throw error;
     showToast('บันทึกโปรไฟล์ร้านแล้ว กำลังรอแอดมินอนุมัติ');
     await afterLogin();
-  } catch (err) { console.error(err); showToast('บันทึกไม่สำเร็จ: ' + (err.message||'')); }
+  } catch (err) {
+    console.error(err);
+    showToast('บันทึกไม่สำเร็จ: ' + (err.message||''));
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'บันทึกและส่งขออนุมัติ'; }
+  }
 }
 
 /* ============ DATA ============ */
@@ -218,11 +332,48 @@ async function refreshMenu(){
     state.menu = data || [];
   } catch (err) { console.warn('refreshMenu failed', err); }
 }
+
+/* ============ แจ้งเตือนงานใหม่ (เสียง + Notification เบราว์เซอร์) ============ */
+let sharedAudioCtx = null;
+function playAlertSound(){
+  try {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+    const ctx = sharedAudioCtx;
+    const now = ctx.currentTime;
+    [0, 0.18, 0.36].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.35, now + t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now + t); osc.stop(now + t + 0.16);
+    });
+  } catch (e) { console.warn('เล่นเสียงไม่ได้', e); }
+}
+function ensureNotificationPermission(){
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') Notification.requestPermission();
+}
+function showBrowserNotification(title, body){
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try { new Notification(title, { body }); } catch (e) { console.warn(e); }
+}
+
 function subscribeOrders(){
   if (!supabaseClient || ordersChannel) return;
   ordersChannel = supabaseClient
     .channel('merchant_orders_' + state.restaurantId)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async () => {
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
+      playAlertSound();
+      showBrowserNotification('🔔 มีออเดอร์ใหม่เข้ามา!', `ออเดอร์ #${payload.new.order_code || ''} รอการยืนยัน`);
+      showToast('🔔 มีออเดอร์ใหม่เข้ามา!');
+      await refreshOrders(); render();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async () => {
       await refreshOrders(); render();
     })
     .subscribe();
@@ -313,11 +464,11 @@ function authHtml(){
   <div class="onboard-card">
     <div class="onboard-emoji">🏪</div>
     <h2 style="font-size:17px;margin-top:10px;">${isSignup ? 'สมัครร้านค้าใหม่' : 'เข้าสู่ระบบร้านค้า'}</h2>
-    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">${isSignup ? 'สมัครด้วยอีเมลของร้าน แล้วตั้งค่าโปรไฟล์ร้านในขั้นถัดไป' : 'เข้าสู่ระบบด้วยอีเมลที่สมัครไว้'}</p>
-    <div class="f-label">อีเมล</div>
-    <input id="auth-email" type="email" class="f-input" placeholder="restaurant@email.com">
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">${isSignup ? 'ตั้งชื่อผู้ใช้และรหัสผ่านของร้านเอง แล้วตั้งค่าโปรไฟล์ร้านในขั้นถัดไป' : 'เข้าสู่ระบบด้วยชื่อผู้ใช้ที่ตั้งไว้'}</p>
+    <div class="f-label">ชื่อผู้ใช้</div>
+    <input id="auth-username" type="text" class="f-input" placeholder="ตั้งชื่อผู้ใช้ของร้าน" autocomplete="username">
     <div class="f-label">รหัสผ่าน</div>
-    <input id="auth-password" type="password" class="f-input" placeholder="อย่างน้อย 6 ตัวอักษร">
+    <input id="auth-password" type="password" class="f-input" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
     <button class="btn-primary" onclick="${isSignup ? 'doSignup()' : 'doLogin()'}">${isSignup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
     <button class="btn-primary" style="background:transparent;color:var(--primary);margin-top:8px;box-shadow:none;" onclick="state.authMode='${isSignup ? 'login' : 'signup'}';render()">
       ${isSignup ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีร้าน? สมัครใหม่'}
@@ -325,16 +476,58 @@ function authHtml(){
   </div>`;
 }
 function setupProfileHtml(){
+  setTimeout(initProfileMap, 100);
+  const catOptions = CATEGORY_OPTIONS.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
   return `
-  <div class="onboard-card">
-    <div class="onboard-emoji">📝</div>
-    <h2 style="font-size:17px;margin-top:10px;">ตั้งค่าโปรไฟล์ร้านค้า</h2>
-    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">กรอกข้อมูลร้านของคุณ (ส่งให้แอดมินตรวจสอบก่อนเปิดขาย)</p>
-    <div class="f-label">ชื่อร้าน</div><input id="sp-name" class="f-input" placeholder="เช่น ส้มตำแซ่บนัว">
-    <div class="f-label">หมวดหมู่</div><input id="sp-cat" class="f-input" placeholder="เช่น thai, noodle, isaan, dessert, pizza">
-    <div class="f-label">อิโมจิร้าน</div><input id="sp-emoji" class="f-input" placeholder="🍜">
-    <div class="f-label">แท็กร้าน</div><input id="sp-tags" class="f-input" placeholder="เช่น ก๋วยเตี๋ยวเรือ • เย็นตาโฟ">
-    <button class="btn-primary" onclick="submitProfile()">บันทึกและส่งขออนุมัติ</button>
+  <div class="onboard-card" style="text-align:left;margin:24px 18px;">
+    <div style="text-align:center;">
+      <div class="onboard-emoji">📝</div>
+      <h2 style="font-size:17px;margin-top:10px;">สมัครร้านค้า — กรอกข้อมูลให้ครบ</h2>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">ข้อมูลทั้งหมดจะถูกส่งให้แอดมินตรวจสอบก่อนเปิดขายจริง</p>
+    </div>
+
+    <div class="form-section-title">ข้อมูลทั่วไปของร้านค้า</div>
+    <div class="field-row">
+      <div style="flex:1;"><div class="f-label">ชื่อร้านค้า (ภาษาไทย)</div><input id="sp-name" class="f-input" placeholder="เช่น ส้มตำแซ่บนัว"></div>
+    </div>
+    <div class="f-label">ชื่อร้านค้า (English) — ถ้ามี</div>
+    <input id="sp-name-en" class="f-input" placeholder="e.g. Saab Nua Som Tum">
+    <div class="f-label">ประเภทอาหาร/สินค้า</div>
+    <select id="sp-cat" class="f-input"><option value="">— เลือกประเภท —</option>${catOptions}</select>
+    <div class="f-label">เบอร์โทรศัพท์ร้านค้า</div>
+    <input id="sp-phone" class="f-input" type="tel" placeholder="08xxxxxxxx">
+    <div class="f-label">ภาพถ่ายหน้าร้าน (เห็นป้ายชื่อร้านชัดเจน)</div>
+    <input id="sp-storefront" type="file" accept="image/*" class="f-input" onchange="previewFileTo('sp-storefront','sp-storefront-preview')">
+    <img id="sp-storefront-preview" class="img-preview">
+
+    <div class="form-section-title">ที่ตั้งร้านค้า</div>
+    <div class="f-label">ที่อยู่ร้านค้าโดยละเอียด</div>
+    <textarea id="sp-address" class="f-input" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด"></textarea>
+    <div class="f-label">พิกัดร้าน (แตะบนแผนที่เพื่อปักหมุด)</div>
+    <div id="profile-map"></div>
+    <button type="button" class="btn-outline-mini" onclick="useCurrentLocationForProfile()">📍 ใช้ตำแหน่งปัจจุบันของฉัน</button>
+    <div class="coords-label" id="map-coords-label">ยังไม่ได้เลือกพิกัด</div>
+    <input type="hidden" id="sp-lat"><input type="hidden" id="sp-lng">
+
+    <div class="form-section-title">ข้อมูลเจ้าของร้าน</div>
+    <div class="field-row">
+      <div><div class="f-label">ชื่อ</div><input id="sp-owner-first" class="f-input" placeholder="ชื่อจริง"></div>
+      <div><div class="f-label">นามสกุล</div><input id="sp-owner-last" class="f-input" placeholder="นามสกุล"></div>
+    </div>
+    <div class="f-label">เบอร์โทรศัพท์เจ้าของร้าน</div>
+    <input id="sp-owner-phone" class="f-input" type="tel" placeholder="08xxxxxxxx">
+    <div class="f-label">เลขบัตรประชาชน (13 หลัก)</div>
+    <input id="sp-owner-nid" class="f-input" inputmode="numeric" maxlength="13" placeholder="1234567890123">
+    <div class="f-label">ภาพถ่ายบัตรประชาชน (เห็นหน้าบัตรชัดเจน ไม่สะท้อนแสง)</div>
+    <input id="sp-owner-idcard" type="file" accept="image/*" class="f-input" onchange="previewFileTo('sp-owner-idcard','sp-owner-idcard-preview')">
+    <img id="sp-owner-idcard-preview" class="img-preview">
+    <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">🔒 รูปบัตรประชาชนถูกเก็บแบบส่วนตัว มีแต่คุณและแอดมินเท่านั้นที่เปิดดูได้</p>
+
+    <div class="form-section-title">การรับเงิน</div>
+    <div class="f-label">พร้อมเพย์ที่ใช้รับเงิน (เบอร์โทร หรือ เลขบัตรประชาชน)</div>
+    <input id="sp-promptpay" class="f-input" placeholder="เช่น 08xxxxxxxx">
+
+    <button class="btn-primary" id="sp-submit-btn" onclick="submitProfile()">บันทึกและส่งขออนุมัติ</button>
     <button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>
   </div>`;
 }
