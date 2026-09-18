@@ -156,6 +156,13 @@
   .hero .steam { position: absolute; right: 46px; top: 14px; font-size: 20px; opacity: .8; animation: float 3s ease-in-out infinite; }
   @keyframes float { 0%,100% { transform: translateY(0); opacity:.5 } 50% { transform: translateY(-8px); opacity: .9 } }
 
+  /* ---------- Promo banner carousel ---------- */
+  .promo-carousel { margin: 4px 0 18px; padding: 0 18px; display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .promo-carousel::-webkit-scrollbar { display: none; }
+  .promo-slide { flex: 0 0 88%; scroll-snap-align: start; border-radius: var(--radius-l); overflow: hidden; position: relative; background: var(--surface-2); border: none; padding: 0; cursor: pointer; }
+  .promo-slide img { width: 100%; height: 140px; object-fit: cover; display: block; }
+  .promo-slide .promo-slide-title { position: absolute; left: 14px; bottom: 10px; color: #fff; font-weight: 800; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+
   /* ---------- Categories ---------- */
   .section-title {
     display: flex; align-items: baseline; justify-content: space-between;
@@ -441,6 +448,7 @@ const state = {
 };
 let RESTAURANTS = [];
 let dataSource = 'loading'; // 'supabase' | 'mock'
+let promoBanners = [];
 
 function loadState() {
   try { const c = localStorage.getItem('imduan_cart'); if (c) state.cart = JSON.parse(c); } catch(e) {}
@@ -487,6 +495,13 @@ async function ensureCustomerRow() {
     state.customerName = data.name;
   }
 }
+async function refreshPromoBanners() {
+  try {
+    const { data, error } = await supabaseClient.from('promo_banners').select('*').eq('active', true).order('sort_order', { ascending: true });
+    if (error) throw error;
+    promoBanners = data || [];
+  } catch (err) { console.warn('refreshPromoBanners failed', err); }
+}
 async function loginWithProvider(provider) {
   try {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -514,18 +529,28 @@ async function init() {
     try {
       const { data, error } = await supabaseClient
         .from('restaurants')
-        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
+        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
         .eq('status', 'active')
+        .order('is_featured', { ascending: false })
         .order('name', { ascending: true });
       if (error) throw error;
       RESTAURANTS = (data || []).map(mapRestaurantRow);
-      await ensureSession();
-      await ensureCustomerRow();
       dataSource = 'supabase';
     } catch (err) {
       console.warn('Load restaurants failed, using demo data instead:', err);
       RESTAURANTS = MOCK_RESTAURANTS;
       dataSource = 'mock';
+    }
+    if (dataSource === 'supabase') {
+      try {
+        await ensureSession();
+        await ensureCustomerRow();
+      } catch (err) {
+        // มักเกิดจากยังไม่เปิด "Allow anonymous sign-ins" ใน Supabase Authentication > Providers
+        console.warn('Auth session failed (check "Allow anonymous sign-ins" in Supabase):', err);
+        state.authBlocked = true;
+      }
+      await refreshPromoBanners();
     }
   } else {
     RESTAURANTS = MOCK_RESTAURANTS;
@@ -679,7 +704,8 @@ async function placeOrder() {
       showToast('สั่งซื้อไม่สำเร็จ ลองใหม่อีกครั้ง');
     }
   } else {
-    // โหมดตัวอย่าง (ยังไม่เชื่อม Supabase) — จำลองสถานะในเครื่องนี้เท่านั้น
+    // dataSource เป็น supabase แต่ยังไม่มี customerId (มักเกิดจากยังไม่เปิด anonymous sign-in) หรือยังไม่เชื่อม Supabase เลย
+    // จำลองสถานะในเครื่องนี้เท่านั้น ไม่ถูกส่งไปที่ร้านค้า/ไรเดอร์จริง
     const order = {
       id: orderCode, code: orderCode, restaurantId: r.id, restaurantName: r.name, restaurantEmoji: r.emoji,
       items: cartLines, subtotal, deliveryFee, total, address: addr, payment: checkoutPayment,
@@ -690,6 +716,9 @@ async function placeOrder() {
     saveOrders();
     clearCart(); activeSheet = null;
     setView('tracking');
+    if (dataSource === 'supabase' && !state.customerId) {
+      showToast('⚠️ ยังสั่งจริงไม่ได้ — ต้องเปิด Allow anonymous sign-ins ใน Supabase ก่อน (ตอนนี้เป็นแค่ตัวอย่าง)');
+    }
     simulateProgressDemo(order);
   }
 }
@@ -806,11 +835,12 @@ function renderHome() {
       <input placeholder="ค้นหาร้านอาหารหรือเมนู..." value="${state.searchQuery}" oninput="state.searchQuery=this.value; renderList();" />
     </div>
   </div>
+  ${promoBanners.length > 0 ? promoCarouselHtml() : `
   <div class="hero">
     <h1>หิวไหม? สั่งเลยตอนนี้</h1>
     <p>ส่งฟรีออเดอร์แรก เมื่อสั่งขั้นต่ำ 99 บาท</p>
     <div class="steam">〰️</div><div class="bowl">🍜</div>
-  </div>
+  </div>`}
   <div class="section-title"><h2>หมวดหมู่</h2></div>
   <div class="cats">
     ${CATEGORIES.map(c => `<button class="chip ${state.activeCat===c.id?'active':''}" onclick="state.activeCat='${c.id}'; renderList();">${c.icon} ${c.label}</button>`).join('')}
@@ -819,6 +849,15 @@ function renderHome() {
   <div class="rest-list" id="rest-list">${restaurantListHtml(list)}</div>
   <div style="height:100px"></div>
   `;
+}
+function promoCarouselHtml() {
+  return `<div class="promo-carousel">
+    ${promoBanners.map(b => `
+      <button class="promo-slide" onclick="${b.link_url ? `window.open('${b.link_url}','_blank')` : ''}">
+        <img src="${b.image_url}" alt="${b.title||''}">
+        ${b.title ? `<div class="promo-slide-title">${b.title}</div>` : ''}
+      </button>`).join('')}
+  </div>`;
 }
 function restaurantListHtml(list) {
   if (list.length === 0) {
@@ -971,6 +1010,14 @@ function profileSheetHtml() {
       <div class="sheet-handle"></div>
       <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
       <div class="empty-state"><div class="e">🔌</div><h3>ยังไม่เชื่อมฐานข้อมูล</h3><p>ระบบเข้าสู่ระบบจะใช้ได้เมื่อเชื่อม Supabase แล้ว</p></div>
+    </div>`;
+  }
+  if (!state.customerId) {
+    return `
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+      <div class="empty-state"><div class="e">🔐</div><h3>ระบบเข้าสู่ระบบยังไม่พร้อม</h3><p>ต้องเปิด "Allow anonymous sign-ins" ใน Supabase Dashboard &gt; Authentication &gt; Providers ก่อน แล้วรีเฟรชหน้านี้ใหม่ (ยังสั่งอาหารแบบไม่ล็อกอินได้ตามปกติ)</p></div>
     </div>`;
   }
   return `

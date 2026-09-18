@@ -253,8 +253,28 @@ function deniedHtml(){
   </div>`;
 }
 async function refreshAll(){
-  await Promise.all([refreshRestaurants(), refreshRiders(), refreshUsers(), refreshOrders(), refreshSettings(), refreshTodayOrdersCount()]);
+  await Promise.all([refreshRestaurants(), refreshRiders(), refreshUsers(), refreshOrders(), refreshSettings(), refreshTodayOrdersCount(), refreshPromos(), refreshAllMenuItems()]);
   await computeGmvWeekFromDb();
+}
+
+let promoBanners = [];
+async function refreshPromos(){
+  try {
+    const { data, error } = await supabaseClient.from('promo_banners').select('*').order('sort_order', { ascending: true });
+    if (error) throw error;
+    promoBanners = data || [];
+  } catch (err) { console.warn('refreshPromos failed', err); }
+}
+let allMenuItems = [];
+async function refreshAllMenuItems(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('menu_items')
+      .select('id,name,price,emoji,image_url,is_available,restaurant_id,restaurants(name)')
+      .order('name', { ascending: true });
+    if (error) throw error;
+    allMenuItems = (data || []).map(m => ({ ...m, restaurantName: m.restaurants ? m.restaurants.name : '-' }));
+  } catch (err) { console.warn('refreshAllMenuItems failed', err); }
 }
 
 async function refreshRestaurants(){
@@ -349,9 +369,11 @@ function subscribeRealtime(){
 const PAGES = [
   {id:'overview', label:'ภาพรวมระบบ', icon:'📊'},
   {id:'restaurants', label:'ร้านค้า', icon:'🏪'},
+  {id:'menuitems', label:'จัดการเมนู', icon:'🍽️'},
   {id:'riders', label:'ไรเดอร์', icon:'🏍️'},
   {id:'users', label:'ผู้ใช้งาน', icon:'👥'},
   {id:'orders', label:'คำสั่งซื้อ', icon:'🧾'},
+  {id:'promos', label:'โปรโมชันหน้าแรก', icon:'🖼️'},
   {id:'finance', label:'การเงิน', icon:'💰'},
 ];
 function setPage(p){ activePage=p; render(); }
@@ -488,6 +510,26 @@ async function reactivateRest(id){
   try { const { error } = await supabaseClient.from('restaurants').update({status:'active'}).eq('id',id); if (error) throw error; showToast('เปิดใช้งานร้านแล้ว'); await refreshRestaurants(); render(); }
   catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
 }
+async function toggleFeatured(id, current){
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try { const { error } = await supabaseClient.from('restaurants').update({ is_featured: !current }).eq('id', id); if (error) throw error;
+    showToast(!current ? '📌 ปักหมุดร้านนี้ให้ขึ้นก่อนแล้ว' : 'เลิกปักหมุดแล้ว'); await refreshRestaurants(); render();
+  } catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function deleteRestPermanently(id, name){
+  if (!confirm(`ลบร้าน "${name}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try {
+    const { error } = await supabaseClient.from('restaurants').delete().eq('id', id);
+    if (error) throw error;
+    showToast('ลบร้านแล้ว'); await refreshRestaurants(); render();
+  } catch(err) {
+    console.error(err);
+    if (String(err.message||'').toLowerCase().includes('foreign key') || String(err.code)==='23503') {
+      showToast('ลบไม่ได้ เพราะร้านนี้มีประวัติออเดอร์อยู่ — ใช้ปุ่ม "ระงับ" แทน');
+    } else showToast('ลบไม่สำเร็จ: ' + (err.message||''));
+  }
+}
 const REST_FILTERS = [{id:'all',label:'ทั้งหมด'},{id:'active',label:'ใช้งานอยู่'},{id:'pending',label:'รออนุมัติ'},{id:'suspended',label:'ถูกระงับ'}];
 const REST_TAG_LABEL = {active:'ใช้งานอยู่', pending:'รออนุมัติ', suspended:'ถูกระงับ'};
 function renderRestaurants(){
@@ -500,10 +542,11 @@ function renderRestaurants(){
       <div class="filter-row">${REST_FILTERS.map(f=>`<button class="filt ${restFilter===f.id?'active':''}" onclick="restFilter='${f.id}';render()">${f.label}</button>`).join('')}</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>ร้านค้า</th><th>หมวดหมู่</th><th>คะแนน</th><th>ออเดอร์สำเร็จ</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <thead><tr><th></th><th>ร้านค้า</th><th>หมวดหมู่</th><th>คะแนน</th><th>ออเดอร์สำเร็จ</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
         <tbody>
           ${list.map(r=>`
             <tr>
+              <td><button class="btn-mini ${r.raw && r.raw.is_featured ? 'approve' : 'outline'}" style="padding:6px 8px;" title="ปักหมุดให้ขึ้นก่อน" onclick="toggleFeatured('${r.id}', ${!!(r.raw && r.raw.is_featured)})">${r.raw && r.raw.is_featured ? '📌' : '📍'}</button></td>
               <td><div class="name-cell"><div class="avatar-sm">${r.emoji}</div><b>${r.name}</b></div></td>
               <td>${r.cat}</td>
               <td>${r.rating>0 ? '⭐ '+r.rating : '—'}</td>
@@ -514,8 +557,147 @@ function renderRestaurants(){
                 ${r.status==='pending' ? `<button class="btn-mini approve" onclick="approveRest('${r.id}')">อนุมัติ</button>` : ''}
                 ${r.status==='active' ? `<button class="btn-mini suspend" onclick="suspendRest('${r.id}')">ระงับ</button>` : ''}
                 ${r.status==='suspended' ? `<button class="btn-mini approve" onclick="reactivateRest('${r.id}')">เปิดใช้งาน</button>` : ''}
+                <button class="btn-mini suspend" onclick="deleteRestPermanently('${r.id}', '${r.name.replace(/'/g,"\\'")}')">ลบ</button>
               </td>
             </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ เมนู/สินค้า (global) ============ */
+let menuItemFilter = '';
+async function toggleMenuItemGlobal(id, current){
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try { const { error } = await supabaseClient.from('menu_items').update({ is_available: !current }).eq('id', id); if (error) throw error;
+    await refreshAllMenuItems(); render();
+  } catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function deleteMenuItemGlobal(id, name){
+  if (!confirm(`ลบเมนู "${name}" ทิ้งถาวร?`)) return;
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try { const { error } = await supabaseClient.from('menu_items').delete().eq('id', id); if (error) throw error;
+    showToast('ลบเมนูแล้ว'); await refreshAllMenuItems(); render();
+  } catch(err){ console.error(err); showToast('ลบไม่สำเร็จ'); }
+}
+function renderMenuItems(){
+  const q = menuItemFilter.trim().toLowerCase();
+  const list = !q ? allMenuItems : allMenuItems.filter(m => m.name.toLowerCase().includes(q) || m.restaurantName.toLowerCase().includes(q));
+  return `
+  ${header('จัดการเมนู/สินค้า','แบนหรือลบเมนูรายตัวได้จากทุกร้านค้า')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div style="padding:14px 18px;"><input class="f-input" placeholder="ค้นหาเมนูหรือชื่อร้าน..." value="${menuItemFilter}" oninput="menuItemFilter=this.value;render()"></div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th>เมนู</th><th>ร้าน</th><th>ราคา</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <tbody>
+          ${list.map(m=>`
+            <tr>
+              <td>${m.image_url ? `<img src="${m.image_url}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;">` : `<div class="avatar-sm">${m.emoji||'🍽️'}</div>`}</td>
+              <td><b>${m.name}</b></td>
+              <td>${m.restaurantName}</td>
+              <td>฿${Number(m.price||0).toLocaleString('th-TH')}</td>
+              <td><span class="tag ${m.is_available?'active':'suspended'}">${m.is_available?'ขายอยู่':'ถูกแบน'}</span></td>
+              <td>
+                <button class="btn-mini ${m.is_available?'suspend':'approve'}" onclick="toggleMenuItemGlobal('${m.id}', ${m.is_available})">${m.is_available?'แบน':'ปลดแบน'}</button>
+                <button class="btn-mini suspend" onclick="deleteMenuItemGlobal('${m.id}', '${(m.name||'').replace(/'/g,"\\'")}')">ลบ</button>
+              </td>
+            </tr>`).join('')}
+          ${list.length===0 ? `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">ไม่พบเมนู</td></tr>` : ''}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ โปรโมชันหน้าแรก ============ */
+function previewPromoImage(){
+  const input = document.getElementById('promo-image');
+  const img = document.getElementById('promo-preview');
+  const file = input.files && input.files[0];
+  if (!file || !img) return;
+  const reader = new FileReader();
+  reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(file);
+}
+async function addPromoBanner(){
+  const file = document.getElementById('promo-image').files[0];
+  const title = document.getElementById('promo-title').value.trim();
+  const link = document.getElementById('promo-link').value.trim();
+  const sortOrder = Number(document.getElementById('promo-sort').value) || 0;
+  if (!file) { showToast('เลือกรูปแบนเนอร์ก่อน'); return; }
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  const btn = document.getElementById('promo-add-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังอัปโหลด...'; }
+  try {
+    const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+    const path = `${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabaseClient.storage.from('promo-banners').upload(path, file);
+    if (upErr) throw upErr;
+    const { data: pub } = supabaseClient.storage.from('promo-banners').getPublicUrl(path);
+    const { error } = await supabaseClient.from('promo_banners').insert({
+      image_url: pub.publicUrl, title: title || null, link_url: link || null, sort_order: sortOrder, active: true,
+    });
+    if (error) throw error;
+    showToast('เพิ่มแบนเนอร์แล้ว');
+    document.getElementById('promo-image').value = '';
+    document.getElementById('promo-title').value = '';
+    document.getElementById('promo-link').value = '';
+    const prev = document.getElementById('promo-preview'); if (prev) prev.style.display = 'none';
+    await refreshPromos(); render();
+  } catch (err) { console.error(err); showToast('เพิ่มแบนเนอร์ไม่สำเร็จ: ' + (err.message||'')); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'เพิ่มแบนเนอร์'; } }
+}
+async function togglePromoActive(id, current){
+  try { const { error } = await supabaseClient.from('promo_banners').update({ active: !current }).eq('id', id); if (error) throw error;
+    await refreshPromos(); render();
+  } catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function deletePromoBanner(id){
+  if (!confirm('ลบแบนเนอร์นี้?')) return;
+  try { const { error } = await supabaseClient.from('promo_banners').delete().eq('id', id); if (error) throw error;
+    showToast('ลบแบนเนอร์แล้ว'); await refreshPromos(); render();
+  } catch(err){ console.error(err); showToast('ลบไม่สำเร็จ'); }
+}
+function renderPromos(){
+  return `
+  ${header('โปรโมชันหน้าแรก','อัปโหลดรูปแบนเนอร์ให้ขึ้นบนแอปลูกค้า ไม่ต้องแก้โค้ด')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div class="panel-head"><h2>เพิ่มแบนเนอร์ใหม่</h2></div>
+      <div style="padding:0 18px 18px;">
+        <div class="f-group" style="margin-bottom:10px;"><label>รูปแบนเนอร์</label><input id="promo-image" type="file" accept="image/*" onchange="previewPromoImage()"></div>
+        <img id="promo-preview" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:10px;">
+        <div class="f-group" style="margin-bottom:10px;"><label>หัวข้อ (ถ้ามี)</label><input id="promo-title" placeholder="เช่น ลด 20% สั่งครั้งแรก"></div>
+        <div class="f-group" style="margin-bottom:10px;"><label>ลิงก์ปลายทาง (ถ้ามี — เว้นว่างได้)</label><input id="promo-link" placeholder="https://..."></div>
+        <div class="f-group" style="margin-bottom:10px;"><label>ลำดับการแสดง (เลขน้อยขึ้นก่อน)</label><input id="promo-sort" type="number" value="0"></div>
+        <button class="btn-primary" id="promo-add-btn" onclick="addPromoBanner()" style="width:100%;">เพิ่มแบนเนอร์</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-head"><h2>แบนเนอร์ทั้งหมด</h2></div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>รูป</th><th>หัวข้อ</th><th>ลำดับ</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <tbody>
+          ${promoBanners.map(p=>`
+            <tr>
+              <td><img src="${p.image_url}" style="width:70px;height:40px;border-radius:6px;object-fit:cover;"></td>
+              <td>${p.title||'—'}</td>
+              <td>${p.sort_order}</td>
+              <td><span class="tag ${p.active?'active':'suspended'}">${p.active?'แสดงอยู่':'ซ่อนอยู่'}</span></td>
+              <td>
+                <button class="btn-mini ${p.active?'suspend':'approve'}" onclick="togglePromoActive('${p.id}', ${p.active})">${p.active?'ซ่อน':'แสดง'}</button>
+                <button class="btn-mini suspend" onclick="deletePromoBanner('${p.id}')">ลบ</button>
+              </td>
+            </tr>`).join('')}
+          ${promoBanners.length===0 ? `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">ยังไม่มีแบนเนอร์</td></tr>` : ''}
         </tbody>
       </table>
       </div>
@@ -671,9 +853,11 @@ function render(){
   let page = '';
   if (activePage==='overview') page = renderOverview();
   if (activePage==='restaurants') page = renderRestaurants();
+  if (activePage==='menuitems') page = renderMenuItems();
   if (activePage==='riders') page = renderRiders();
   if (activePage==='users') page = renderUsers();
   if (activePage==='orders') page = renderOrders();
+  if (activePage==='promos') page = renderPromos();
   if (activePage==='finance') page = renderFinance();
   const sbHtml = sidebarHtml().replace('class="sidebar"', `class="sidebar${sidebarOpen?' open':''}"`);
   let detailHtml = '';
