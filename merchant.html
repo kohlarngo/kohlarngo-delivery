@@ -252,6 +252,9 @@ const CATEGORY_OPTIONS = [
   { id: 'dessert', label: 'ของหวาน/เครื่องดื่ม' }, { id: 'bakery', label: 'เบเกอรี่' }, { id: 'pizza', label: 'พิซซ่า/พาสต้า' },
   { id: 'japanese', label: 'ญี่ปุ่น' }, { id: 'fastfood', label: 'ฟาสต์ฟู้ด' }, { id: 'other', label: 'อื่นๆ' },
 ];
+const MENU_GROUP_OPTIONS = [
+  'เมนูแนะนำ', 'จานเดียว', 'กับข้าว', 'ของทานเล่น', 'ย่าง/ทอด', 'ก๋วยเตี๋ยว/เส้น', 'สลัด', 'เครื่องดื่ม', 'ของหวาน', 'อื่นๆ',
+];
 let profileMap = null, profileMarker = null;
 function initProfileMap(){
   const el = document.getElementById('profile-map');
@@ -469,6 +472,16 @@ async function toggleSelfDelivery(){
     showToast(newVal ? '🎉 เปิดโหมด "จัดส่งเองโดยทางร้าน" แล้ว' : 'ปิดโหมดจัดส่งเอง กลับไปใช้ไรเดอร์ภายนอก');
     render();
   } catch (err) { console.error(err); showToast('เปลี่ยนโหมดไม่สำเร็จ'); }
+}
+async function toggleOpenStatus(){
+  const newVal = !(state.restaurant.is_open !== false);
+  try {
+    const { error } = await supabaseClient.from('restaurants').update({ is_open: newVal }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.is_open = newVal;
+    showToast(newVal ? '🟢 เปิดร้านแล้ว ลูกค้าสั่งได้' : '🔴 ปิดร้านแล้ว ลูกค้าจะไม่เห็นเมนูของคุณจนกว่าจะเปิดอีกครั้ง');
+    render();
+  } catch (err) { console.error(err); showToast('เปลี่ยนสถานะร้านไม่สำเร็จ'); }
 }
 
 /* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
@@ -688,11 +701,16 @@ function suspendedHtml(){
 }
 function topbar(){
   const r = state.restaurant;
+  const isOpen = r.is_open !== false;
   return `
   <div class="topbar">
     <div class="avatar">${r.emoji||'🏪'}</div>
     <div class="who"><div class="name">${r.name}</div><div class="sub" onclick="doLogout()" style="cursor:pointer;text-decoration:underline;">ออกจากระบบ</div></div>
-    <div class="switch-box"><span class="switch-label">${r.status==='active'?'เปิดร้าน':(r.status==='suspended'?'ถูกระงับ':'รออนุมัติ')}</span></div>
+    <div class="switch-box"><span class="switch-label">${r.status==='suspended'?'ถูกระงับ':(r.status==='pending'?'รออนุมัติ':'อนุมัติแล้ว')}</span></div>
+  </div>
+  <div class="gps-box" style="margin:0 18px 10px;">
+    <div><b>${isOpen ? '🟢 ร้านเปิดอยู่' : '🔴 ร้านปิดอยู่'}</b><br><span style="font-size:11px;color:var(--text-muted)">${isOpen ? 'ลูกค้าเห็นเมนูและสั่งได้' : 'ลูกค้าจะไม่เห็นร้านของคุณจนกว่าจะเปิด'}</span></div>
+    <button class="switch ${isOpen?'on':''}" onclick="toggleOpenStatus()"></button>
   </div>
   <div class="gps-box" style="margin:0 18px 14px;">
     <div><b>${r.self_delivery_enabled ? '🎉 จัดส่งเองโดยทางร้าน' : '🏍️ ใช้บริการไรเดอร์ภายนอก'}</b><br><span style="font-size:11px;color:var(--text-muted)">${r.self_delivery_enabled ? 'ลูกค้าเห็นป้ายส่งฟรี ค่าส่ง ฿0 ร้านจัดส่งเอง' : 'ระบบหาไรเดอร์ให้อัตโนมัติเมื่อมีออเดอร์'}</span></div>
@@ -768,7 +786,8 @@ function addItemSheetHtml(){
     <input id="mi-image" type="file" accept="image/*" class="f-input" onchange="previewImage(this)">
     <img id="mi-preview" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;">
     <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด">
-    <div class="f-label">หมวดหมู่ในเมนู</div><input id="mi-group" class="f-input" placeholder="เช่น จานเดียว">
+    <div class="f-label">หมวดหมู่ในเมนู</div>
+    <select id="mi-group" class="f-input">${MENU_GROUP_OPTIONS.map(g => `<option value="${g}">${g}</option>`).join('')}</select>
     <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65">
     <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜">
     <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ">

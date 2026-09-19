@@ -158,11 +158,19 @@
   @keyframes float { 0%,100% { transform: translateY(0); opacity:.5 } 50% { transform: translateY(-8px); opacity: .9 } }
 
   /* ---------- Promo banner carousel ---------- */
-  .promo-carousel { margin: 4px 0 18px; padding: 0 18px; display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
-  .promo-carousel::-webkit-scrollbar { display: none; }
-  .promo-slide { flex: 0 0 88%; scroll-snap-align: start; border-radius: var(--radius-l); overflow: hidden; position: relative; background: var(--surface-2); border: none; padding: 0; cursor: pointer; }
-  .promo-slide img { width: 100%; height: 140px; object-fit: cover; display: block; }
-  .promo-slide .promo-slide-title { position: absolute; left: 14px; bottom: 10px; color: #fff; font-weight: 800; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  .hero-carousel { margin: 4px 18px 18px; border-radius: var(--radius-l); overflow: hidden; position: relative; box-shadow: var(--shadow); background: var(--text); }
+  .hero-carousel-track { position: relative; width: 100%; height: 168px; }
+  .hero-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease-in-out; cursor: pointer; border: none; padding: 0; width: 100%; height: 100%; text-align: left; }
+  .hero-slide.on { opacity: 1; z-index: 1; }
+  .hero-slide img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .hero-slide .hero-slide-scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.65), rgba(0,0,0,.15) 60%, transparent); display: flex; align-items: center; }
+  .hero-slide .hero-slide-text { padding: 20px; max-width: 75%; color: #fff; }
+  .hero-slide .hero-slide-text h2 { font-size: 19px; line-height: 1.25; }
+  .hero-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.4); color: #fff; border: none; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .hero-arrow.prev { left: 10px; } .hero-arrow.next { right: 10px; }
+  .hero-dots { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; gap: 6px; }
+  .hero-dots button { width: 8px; height: 6px; border-radius: 999px; background: rgba(255,255,255,.4); border: none; padding: 0; transition: all .25s; }
+  .hero-dots button.on { width: 20px; background: #fff; }
 
   /* ---------- Categories ---------- */
   .section-title {
@@ -605,6 +613,7 @@ async function init() {
         .from('restaurants')
         .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
         .eq('status', 'active')
+        .eq('is_open', true)
         .order('is_featured', { ascending: false })
         .order('name', { ascending: true });
       if (error) throw error;
@@ -637,6 +646,7 @@ async function init() {
   }
   state.loading = false;
   render();
+  initCarousel();
 }
 
 /* ============ HELPERS ============ */
@@ -886,6 +896,7 @@ function setView(v) {
     unsubscribeChatMessages();
   }
   state.view = v; render(); window.scrollTo(0,0);
+  if (v === 'home') initCarousel();
 }
 async function goToOrders() {
   setView('orders');
@@ -1176,12 +1187,12 @@ function renderHome() {
       <input placeholder="ค้นหาร้านอาหารหรือเมนู..." value="${state.searchQuery}" oninput="state.searchQuery=this.value; renderList();" />
     </div>
   </div>
-  ${promoBanners.length > 0 ? promoCarouselHtml() : `
+  <div id="hero-section">${promoBanners.length > 0 ? promoCarouselHtml() : `
   <div class="hero">
     <h1>หิวไหม? สั่งเลยตอนนี้</h1>
     <p>ส่งฟรีออเดอร์แรก เมื่อสั่งขั้นต่ำ 99 บาท</p>
     <div class="steam">〰️</div><div class="bowl">🍜</div>
-  </div>`}
+  </div>`}</div>
   <div class="section-title"><h2>หมวดหมู่</h2></div>
   <div class="cats">
     ${CATEGORIES.map(c => `<button class="chip ${state.activeCat===c.id?'active':''}" onclick="state.activeCat='${c.id}'; renderList();">${c.icon} ${c.label}</button>`).join('')}
@@ -1191,15 +1202,40 @@ function renderHome() {
   <div style="height:100px"></div>
   `;
 }
+let currentSlide = 0;
+let slideTimer = null;
 function promoCarouselHtml() {
-  return `<div class="promo-carousel">
-    ${promoBanners.map(b => `
-      <button class="promo-slide" onclick="${b.link_url ? `window.open('${b.link_url}','_blank')` : ''}">
-        <img src="${b.image_url}" alt="${b.title||''}">
-        ${b.title ? `<div class="promo-slide-title">${b.title}</div>` : ''}
-      </button>`).join('')}
+  if (currentSlide >= promoBanners.length) currentSlide = 0;
+  return `
+  <div class="hero-carousel">
+    <div class="hero-carousel-track">
+      ${promoBanners.map((b,i) => `
+        <button class="hero-slide ${i===currentSlide?'on':''}" onclick="${b.link_url ? `window.open('${b.link_url}','_blank')` : ''}">
+          <img src="${b.image_url}" alt="${b.title||''}" onerror="this.style.display='none'">
+          ${b.title ? `<div class="hero-slide-scrim"><div class="hero-slide-text"><h2>${b.title}</h2></div></div>` : ''}
+        </button>`).join('')}
+    </div>
+    ${promoBanners.length > 1 ? `
+    <button class="hero-arrow prev" onclick="prevSlide()">‹</button>
+    <button class="hero-arrow next" onclick="nextSlide()">›</button>
+    <div class="hero-dots">${promoBanners.map((b,i)=>`<button class="${i===currentSlide?'on':''}" onclick="goToSlide(${i})"></button>`).join('')}</div>` : ''}
   </div>`;
 }
+function initCarousel() {
+  clearInterval(slideTimer);
+  if (promoBanners.length > 1) slideTimer = setInterval(nextSlide, 4000);
+}
+function renderHeroOnly() {
+  const el = document.getElementById('hero-section');
+  if (el) el.innerHTML = promoBanners.length > 0 ? promoCarouselHtml() : el.innerHTML;
+}
+function goToSlide(index) {
+  currentSlide = index;
+  renderHeroOnly();
+  initCarousel();
+}
+function nextSlide() { if (promoBanners.length === 0) return; goToSlide((currentSlide + 1) % promoBanners.length); }
+function prevSlide() { if (promoBanners.length === 0) return; goToSlide((currentSlide - 1 + promoBanners.length) % promoBanners.length); }
 function restaurantListHtml(list) {
   if (list.length === 0) {
     return `<div class="empty-state" style="grid-column:1/-1"><div class="e">🔎</div><h3>ไม่พบร้านที่ค้นหา</h3><p>ลองค้นหาด้วยคำอื่น หรือเลือกหมวดหมู่อื่นดูนะ</p></div>`;
