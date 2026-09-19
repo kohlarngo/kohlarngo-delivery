@@ -11,6 +11,7 @@
 <!-- Leaflet Map CSS/JS & Supabase SDK -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
@@ -340,6 +341,52 @@
   .steps { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10.5px; color: var(--text-muted); }
   .steps .on { color: var(--primary); font-weight: 800; }
   .order-id { font-size: 11px; color: var(--text-muted); margin-top: 16px; }
+  .track-header { display:flex; align-items:center; justify-content:space-between; padding: 0 4px; margin-bottom: 10px; }
+  .track-order-code { font-size: 13px; font-weight: 800; color: var(--text); }
+  .gpr-indicator { display:flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; color: var(--text-muted); }
+  .gpr-dot { width:7px; height:7px; border-radius:50%; background:#22C55E; box-shadow:0 0 0 0 rgba(34,197,94,.6); animation: gprPulse 1.6s infinite; }
+  @keyframes gprPulse { 0%{box-shadow:0 0 0 0 rgba(34,197,94,.5);} 70%{box-shadow:0 0 0 6px rgba(34,197,94,0);} 100%{box-shadow:0 0 0 0 rgba(34,197,94,0);} }
+  .stage-row { display:flex; justify-content:space-between; margin-top:18px; position:relative; }
+  .stage-row::before { content:''; position:absolute; top:15px; left:8%; right:8%; height:2px; background:var(--border); z-index:0; }
+  .stage-item { flex:1; text-align:center; position:relative; z-index:1; }
+  .stage-dot { width:30px; height:30px; border-radius:50%; background:var(--surface-2); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:13px; }
+  .stage-item.done .stage-dot { background: var(--primary); border-color: var(--primary); color:#fff; }
+  .stage-item.active .stage-dot { background: var(--accent); border-color: var(--accent); color:#fff; }
+  .stage-label { font-size:10.5px; margin-top:6px; color:var(--text-muted); }
+  .stage-item.done .stage-label, .stage-item.active .stage-label { color:var(--text); font-weight:700; }
+  .eta-badge { display:inline-flex; align-items:center; gap:6px; background: var(--surface-2); border:1px solid var(--border); padding:6px 14px; border-radius:999px; font-size:12px; font-weight:700; margin-top:14px; }
+  .driver-card { display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-m); padding:14px; margin-top:14px; }
+  .driver-avatar { width:46px; height:46px; border-radius:50%; background:var(--secondary); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+  .driver-name { font-size:13.5px; font-weight:800; }
+  .driver-meta { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .driver-actions { display:flex; gap:8px; margin-left:auto; }
+  .driver-btn { width:38px; height:38px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center; font-size:14px; color:#fff; }
+  .driver-btn.call { background:#3B82F6; }
+  .driver-btn.chat { background:#0EA5E9; }
+
+  /* ---------- Voice call overlay ---------- */
+  .call-overlay { position: fixed; inset: 0; background: linear-gradient(160deg, #1a2e22, #0d1712); z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; text-align: center; padding: 30px; }
+  .call-avatar { width: 96px; height: 96px; border-radius: 50%; background: rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; font-size: 40px; margin-bottom: 18px; }
+  .call-name { font-size: 19px; font-weight: 800; }
+  .call-status { font-size: 13px; opacity: .75; margin-top: 6px; }
+  .call-timer { font-size: 28px; font-weight: 800; margin-top: 14px; font-variant-numeric: tabular-nums; }
+  .call-actions { display: flex; gap: 22px; margin-top: 36px; }
+  .call-btn { width: 58px; height: 58px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; cursor: pointer; }
+  .call-btn.accept { background: #22C55E; }
+  .call-btn.decline, .call-btn.hangup { background: #EF4444; }
+  .call-btn.mute { background: rgba(255,255,255,.18); font-size: 20px; }
+  .call-btn-label { font-size: 10.5px; margin-top: 6px; opacity: .8; }
+  .call-btn-wrap { display: flex; flex-direction: column; align-items: center; }
+
+  /* ---------- Chat drawer ---------- */
+  .chat-msg-row { display: flex; margin-bottom: 10px; }
+  .chat-msg-row.mine { justify-content: flex-end; }
+  .chat-bubble { max-width: 75%; padding: 9px 13px; border-radius: 16px; font-size: 13px; line-height: 1.4; }
+  .chat-msg-row.mine .chat-bubble { background: var(--primary); color: var(--primary-ink); border-bottom-right-radius: 4px; }
+  .chat-msg-row.theirs .chat-bubble { background: var(--surface-2); color: var(--text); border-bottom-left-radius: 4px; }
+  .chat-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--surface); }
+  .chat-input-row input { flex: 1; border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 10px 16px; font-size: 13px; color: var(--text); font-family: inherit; }
+  .chat-send-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: var(--primary-ink); border: none; flex-shrink: 0; font-size: 16px; }
 
   /* ---------- Live Map Container ---------- */
   #live-tracking-map {
@@ -399,6 +446,22 @@ let carIconRef = null;
 let orderChannel = null;
 let gpsChannel = null;
 
+/* ============ CALL / CHAT (Agora RTC + Supabase Realtime สำหรับสัญญาณเรียกเข้า) ============ */
+const AGORA_APP_ID = '370aa664b73149a5ae69717073df6ddc';
+let agoraClient = null;
+let localAudioTrack = null;
+let callChannel = null;
+let callChannelOrderId = null;
+let callState = 'idle'; // idle | calling | ringing | connected
+let callOpen = false;
+let callTimerHandle = null;
+let callSeconds = 0;
+let micMuted = false;
+let ringInterval = null;
+let chatChannel = null;
+let chatMessages = [];
+let chatOpen = false;
+
 /* ============ CATEGORIES (คงที่ ใช้แค่กรองหน้าจอ) ============ */
 const CATEGORIES = [
   { id: 'all', label: 'ทั้งหมด', icon: '🍽️' },
@@ -449,6 +512,10 @@ const state = {
 let RESTAURANTS = [];
 let dataSource = 'loading'; // 'supabase' | 'mock'
 let promoBanners = [];
+let appLogoUrl = null;
+let checkoutDiscount = { code: null, amount: 0 };
+let checkoutGpsCoords = null; // {lat,lng} เมื่อกดปุ่ม GPS ในหน้าชำระเงิน
+function resetCheckoutExtras(){ checkoutDiscount = { code: null, amount: 0 }; checkoutGpsCoords = null; }
 
 function loadState() {
   try { const c = localStorage.getItem('imduan_cart'); if (c) state.cart = JSON.parse(c); } catch(e) {}
@@ -468,7 +535,7 @@ function mapRestaurantRow(r) {
   return {
     id: r.id, name: r.name, cat: r.category || 'other', emoji: r.emoji || '🍽️', color: r.color || '#FDEDE3',
     tags: r.tags || '', rating: r.rating || 0, time: r.prep_time || '20-30 นาที', price: r.price_level || '฿฿',
-    promo: r.promo || null,
+    promo: r.promo || null, selfDelivery: !!r.self_delivery_enabled,
     menu: Object.keys(groups).map(g => ({ group: g, items: groups[g] })),
   };
 }
@@ -502,6 +569,13 @@ async function refreshPromoBanners() {
     promoBanners = data || [];
   } catch (err) { console.warn('refreshPromoBanners failed', err); }
 }
+async function loadAppLogo() {
+  try {
+    const { data, error } = await supabaseClient.from('platform_settings').select('value').eq('key', 'app_logo_url').maybeSingle();
+    if (error) throw error;
+    appLogoUrl = data && data.value ? data.value : null;
+  } catch (err) { console.warn('loadAppLogo failed', err); }
+}
 async function loginWithProvider(provider) {
   try {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -529,7 +603,7 @@ async function init() {
     try {
       const { data, error } = await supabaseClient
         .from('restaurants')
-        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
+        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
         .eq('status', 'active')
         .order('is_featured', { ascending: false })
         .order('name', { ascending: true });
@@ -551,6 +625,7 @@ async function init() {
         state.authBlocked = true;
       }
       await refreshPromoBanners();
+      await loadAppLogo();
     }
   } else {
     RESTAURANTS = MOCK_RESTAURANTS;
@@ -591,6 +666,214 @@ function showToast(msg) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(() => t.classList.remove('show'), 1600);
 }
+let sharedAudioCtx = null;
+function playAlertSound() {
+  try {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+    const ctx = sharedAudioCtx; const now = ctx.currentTime;
+    [0, 0.18].forEach((t) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now + t); osc.stop(now + t + 0.16);
+    });
+  } catch (e) { console.warn('เล่นเสียงไม่ได้', e); }
+}
+
+/* ============ CALL (Agora RTC ส่งเสียงจริง + Supabase Realtime แค่ใช้แจ้งสายเรียกเข้า) ============ */
+function subscribeCallChannel(orderId) {
+  if (!supabaseClient) return;
+  if (callChannel && callChannelOrderId === orderId) return;
+  if (callChannel) { supabaseClient.removeChannel(callChannel); callChannel = null; }
+  callChannelOrderId = orderId;
+  callChannel = supabaseClient.channel('call_' + orderId);
+  callChannel
+    .on('broadcast', { event: 'call-offer' }, ({ payload }) => { if (payload.from !== 'customer') handleIncomingOffer(); })
+    .on('broadcast', { event: 'call-answer' }, ({ payload }) => { if (payload.from !== 'customer') handleCallAnswer(); })
+    .on('broadcast', { event: 'call-end' }, ({ payload }) => { if (payload.from !== 'customer') endCallLocal(); })
+    .subscribe();
+}
+function unsubscribeCallChannel() {
+  if (callChannel) { supabaseClient.removeChannel(callChannel); callChannel = null; callChannelOrderId = null; }
+  endCallLocal();
+}
+function getAgoraClient() {
+  if (!agoraClient) agoraClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+  return agoraClient;
+}
+async function joinAgoraChannel(orderId) {
+  const client = getAgoraClient();
+  client.removeAllListeners();
+  client.on('user-published', async (user, mediaType) => {
+    await client.subscribe(user, mediaType);
+    if (mediaType === 'audio') {
+      user.audioTrack.play();
+      if (callState !== 'connected') { callState = 'connected'; startCallTimer(); render(); }
+    }
+  });
+  client.on('user-left', () => { endCallLocal(); });
+  await client.join(AGORA_APP_ID, 'order_' + orderId, null, null);
+  localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+  await client.publish([localAudioTrack]);
+}
+async function leaveAgoraChannel() {
+  if (localAudioTrack) { localAudioTrack.close(); localAudioTrack = null; }
+  if (agoraClient) { try { await agoraClient.leave(); } catch (e) { console.warn(e); } }
+}
+function formatCallTime(sec) { const m = Math.floor(sec/60), s = sec%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+function startCallTimer() {
+  callSeconds = 0;
+  callTimerHandle = setInterval(() => {
+    callSeconds++;
+    const el = document.getElementById('call-timer-text');
+    if (el) el.textContent = formatCallTime(callSeconds);
+  }, 1000);
+}
+function playRingtone(){ playAlertSound(); ringInterval = setInterval(playAlertSound, 2000); }
+function stopRingtone(){ clearInterval(ringInterval); ringInterval = null; }
+
+async function startCall() {
+  if (!callChannel || !state.activeOrder) { showToast('ยังเชื่อมต่อระบบโทรไม่ได้ ลองใหม่อีกครั้ง'); return; }
+  if (callState !== 'idle') return;
+  callState = 'calling'; callOpen = true; render();
+  try {
+    await joinAgoraChannel(state.activeOrder.id);
+  } catch (err) {
+    console.error(err); showToast('ไม่สามารถเข้าถึงไมโครโฟนได้ กรุณาอนุญาตสิทธิ์');
+    callState = 'idle'; callOpen = false; render(); return;
+  }
+  callChannel.send({ type: 'broadcast', event: 'call-offer', payload: { from: 'customer' } });
+}
+function handleIncomingOffer() {
+  if (callState !== 'idle') return;
+  callState = 'ringing'; callOpen = true; render();
+  playRingtone();
+}
+async function acceptCall() {
+  stopRingtone();
+  callOpen = true; render();
+  try {
+    await joinAgoraChannel(state.activeOrder.id);
+  } catch (err) { console.error(err); showToast('ไม่สามารถเข้าถึงไมโครโฟนได้'); declineCall(); return; }
+  callChannel.send({ type: 'broadcast', event: 'call-answer', payload: { from: 'customer' } });
+  callState = 'connected'; startCallTimer(); render();
+}
+function declineCall() {
+  stopRingtone();
+  if (callChannel) callChannel.send({ type: 'broadcast', event: 'call-end', payload: { from: 'customer' } });
+  callState = 'idle'; callOpen = false; render();
+}
+function handleCallAnswer() {
+  if (callState === 'calling') { callState = 'connected'; startCallTimer(); render(); }
+}
+function endCall() {
+  if (callChannel) callChannel.send({ type: 'broadcast', event: 'call-end', payload: { from: 'customer' } });
+  endCallLocal();
+}
+async function endCallLocal() {
+  stopRingtone();
+  await leaveAgoraChannel();
+  clearInterval(callTimerHandle); callTimerHandle = null; callSeconds = 0; micMuted = false;
+  callState = 'idle'; callOpen = false;
+  render();
+}
+function toggleMute() {
+  if (!localAudioTrack) return;
+  micMuted = !micMuted;
+  localAudioTrack.setEnabled(!micMuted);
+  render();
+}
+function callModalHtml() {
+  if (!callOpen) return '';
+  const o = state.activeOrder;
+  const name = (o && o.riderInfo) ? o.riderInfo.name : 'ไรเดอร์';
+  let body = '';
+  if (callState === 'calling') {
+    body = `<div class="call-status">กำลังโทรออก...</div>
+    <div class="call-actions"><div class="call-btn-wrap"><button class="call-btn hangup" onclick="endCall()">✕</button><span class="call-btn-label">วางสาย</span></div></div>`;
+  } else if (callState === 'ringing') {
+    body = `<div class="call-status">มีสายเรียกเข้า</div>
+    <div class="call-actions">
+      <div class="call-btn-wrap"><button class="call-btn decline" onclick="declineCall()">✕</button><span class="call-btn-label">ปฏิเสธ</span></div>
+      <div class="call-btn-wrap"><button class="call-btn accept" onclick="acceptCall()">📞</button><span class="call-btn-label">รับสาย</span></div>
+    </div>`;
+  } else if (callState === 'connected') {
+    body = `<div class="call-status">กำลังคุยอยู่</div>
+    <div class="call-timer" id="call-timer-text">00:00</div>
+    <div class="call-actions">
+      <div class="call-btn-wrap"><button class="call-btn mute" onclick="toggleMute()">${micMuted?'🔇':'🎙️'}</button><span class="call-btn-label">${micMuted?'เปิดไมค์':'ปิดไมค์'}</span></div>
+      <div class="call-btn-wrap"><button class="call-btn hangup" onclick="endCall()">✕</button><span class="call-btn-label">วางสาย</span></div>
+    </div>`;
+  }
+  return `
+  <div class="call-overlay">
+    <div class="call-avatar">🏍️</div>
+    <div class="call-name">${name}</div>
+    ${body}
+  </div>`;
+}
+
+/* ============ CHAT ============ */
+function subscribeChatMessages(orderId) {
+  if (!supabaseClient || chatChannel) return;
+  chatChannel = supabaseClient.channel('chat_' + orderId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` }, payload => {
+      chatMessages.push(payload.new);
+      if (chatOpen) render();
+      else if (payload.new.sender_role !== 'customer') { playAlertSound(); showToast('💬 ข้อความใหม่จากไรเดอร์'); }
+    })
+    .subscribe();
+}
+function unsubscribeChatMessages() {
+  if (chatChannel) { supabaseClient.removeChannel(chatChannel); chatChannel = null; }
+  chatMessages = []; chatOpen = false;
+}
+async function loadChatMessages(orderId) {
+  try {
+    const { data, error } = await supabaseClient.from('order_messages').select('*').eq('order_id', orderId).order('created_at', { ascending: true });
+    if (error) throw error;
+    chatMessages = data || [];
+  } catch (err) { console.warn('loadChatMessages failed', err); }
+}
+function openChat() { chatOpen = true; render(); setTimeout(scrollChatToBottom, 50); }
+function closeChat() { chatOpen = false; render(); }
+function scrollChatToBottom() {
+  const el = document.getElementById('chat-messages');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text || !state.activeOrder) return;
+  input.value = '';
+  try {
+    const { error } = await supabaseClient.from('order_messages').insert({
+      order_id: state.activeOrder.id, sender_role: 'customer', sender_id: state.customerId, message: text,
+    });
+    if (error) throw error;
+  } catch (err) { console.error(err); showToast('ส่งข้อความไม่สำเร็จ'); }
+}
+function chatDrawerHtml() {
+  return `
+  <div class="overlay" onclick="if(event.target===this) closeChat()">
+    <div class="sheet" style="height:80vh;display:flex;flex-direction:column;padding:0;">
+      <div class="sheet-title" style="padding:16px 20px 12px;"><h2>แชทกับไรเดอร์</h2><button class="sheet-close" onclick="closeChat()">✕</button></div>
+      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:12px 16px;">
+        ${chatMessages.length === 0 ? `<div class="empty-state"><div class="e">💬</div><h3>เริ่มแชทได้เลย</h3></div>` :
+          chatMessages.map(m => `<div class="chat-msg-row ${m.sender_role==='customer'?'mine':'theirs'}"><div class="chat-bubble">${m.message}</div></div>`).join('')}
+      </div>
+      <div class="chat-input-row">
+        <input id="chat-input" placeholder="พิมพ์ข้อความ..." onkeydown="if(event.key==='Enter'){sendChatMessage();}">
+        <button class="chat-send-btn" onclick="sendChatMessage()">➤</button>
+      </div>
+    </div>
+  </div>`;
+}
 
 /* ============ ACTIONS ============ */
 function setView(v) {
@@ -598,6 +881,9 @@ function setView(v) {
     if (supabaseClient && orderChannel) { supabaseClient.removeChannel(orderChannel); orderChannel = null; }
     if (supabaseClient && gpsChannel) { supabaseClient.removeChannel(gpsChannel); gpsChannel = null; }
     if (liveMap) { liveMap.remove(); liveMap = null; riderMarker = null; }
+    etaMinutes = null; lastEtaCheck = 0;
+    unsubscribeCallChannel();
+    unsubscribeChatMessages();
   }
   state.view = v; render(); window.scrollTo(0,0);
 }
@@ -638,16 +924,23 @@ function openSheet(name) { activeSheet = name; render(); }
 function closeSheet() { activeSheet = null; render(); }
 
 const STATUS_MAP = {
-  pending:        { label: 'รอร้านรับออเดอร์',              emoji: '🧾', pct: 8  },
-  preparing:      { label: 'ร้านกำลังปรุงอาหาร',             emoji: '👨‍🍳', pct: 28 },
-  ready:          { label: 'อาหารพร้อมแล้ว รอไรเดอร์มารับ',   emoji: '📦', pct: 46 },
-  rider_assigned: { label: 'ไรเดอร์กำลังไปที่ร้าน',           emoji: '🏍️', pct: 60 },
-  at_restaurant:  { label: 'ไรเดอร์ถึงร้านแล้ว',              emoji: '🏍️', pct: 74 },
-  picked_up:      { label: 'ไรเดอร์กำลังนำอาหารมาส่งคุณ',     emoji: '🛵', pct: 88 },
-  delivered:      { label: 'จัดส่งสำเร็จ',                    emoji: '✅', pct: 100 },
-  cancelled:      { label: 'ออเดอร์ถูกยกเลิก',                emoji: '❌', pct: 0 },
+  pending:        { label: 'รอไรเดอร์รับงาน',                emoji: '🔍', pct: 15, stage: 0 },
+  preparing:      { label: 'ร้านกำลังปรุงอาหาร',             emoji: '👨‍🍳', pct: 40, stage: 0 },
+  ready:          { label: 'อาหารพร้อมแล้ว',                emoji: '📦', pct: 65, stage: 1 },
+  picked_up:      { label: 'กำลังนำส่งถึงคุณ',               emoji: '🛵', pct: 88, stage: 1 },
+  delivered:      { label: 'จัดส่งสำเร็จ',                    emoji: '✅', pct: 100, stage: 2 },
+  cancelled:      { label: 'ออเดอร์ถูกยกเลิก',                emoji: '❌', pct: 0, stage: -1 },
 };
-const STATUS_ORDER = ['pending','preparing','ready','rider_assigned','at_restaurant','picked_up','delivered'];
+const STATUS_MAP_SELF = {
+  pending:        { label: 'รอร้านรับออเดอร์',                emoji: '🧾', pct: 15, stage: 0 },
+  preparing:      { label: 'ร้านกำลังปรุงอาหาร',              emoji: '👨‍🍳', pct: 40, stage: 0 },
+  ready:          { label: 'อาหารพร้อมแล้ว เตรียมจัดส่ง',      emoji: '📦', pct: 65, stage: 1 },
+  picked_up:      { label: 'ร้านกำลังนำมาส่งคุณเอง',          emoji: '🛵', pct: 88, stage: 1 },
+  delivered:      { label: 'จัดส่งสำเร็จ',                    emoji: '✅', pct: 100, stage: 2 },
+  cancelled:      { label: 'ออเดอร์ถูกยกเลิก',                emoji: '❌', pct: 0, stage: -1 },
+};
+const STATUS_ORDER = ['pending','preparing','ready','picked_up','delivered'];
+const TRACK_STAGES = ['กำลังเตรียม','จัดส่ง','ถึงแล้ว'];
 
 async function placeOrder() {
   const addr = document.getElementById('addr-input') ? document.getElementById('addr-input').value.trim() : '';
@@ -662,9 +955,14 @@ async function placeOrder() {
     return { menu_item_id: id, name: item.name, qty, price: item.price, emoji: item.emoji };
   });
   const subtotal = cartSubtotal();
-  const deliveryFee = subtotal > 0 ? 15 : 0;
-  const total = subtotal + deliveryFee;
+  const isSelfDelivery = !!r.selfDelivery;
+  const deliveryFee = isSelfDelivery ? 0 : (subtotal > 0 ? 15 : 0);
+  const discountAmount = checkoutDiscount.amount || 0;
+  const discountCode = checkoutDiscount.code || null;
+  const total = Math.max(0, subtotal + deliveryFee - discountAmount);
   const orderCode = 'OD' + Date.now().toString().slice(-8);
+  const dropLat = checkoutGpsCoords ? checkoutGpsCoords.lat : null;
+  const dropLng = checkoutGpsCoords ? checkoutGpsCoords.lng : null;
 
   if (dataSource === 'supabase' && supabaseClient && state.customerId) {
     try {
@@ -679,6 +977,8 @@ async function placeOrder() {
           order_code: orderCode, customer_id: state.customerId, restaurant_id: r.id,
           status: 'pending', subtotal, delivery_fee: deliveryFee, total,
           address: addr, payment_method: checkoutPayment, note,
+          is_self_delivery: isSelfDelivery, dropoff_lat: dropLat, dropoff_lng: dropLng,
+          discount_code: discountCode, discount_amount: discountAmount,
         })
         .select().single();
       if (orderErr) throw orderErr;
@@ -687,18 +987,20 @@ async function placeOrder() {
       }));
       const { error: itemsErr } = await supabaseClient.from('order_items').insert(itemsPayload);
       if (itemsErr) throw itemsErr;
+      if (discountCode) { try { await supabaseClient.rpc('increment_promo_usage', { p_code: discountCode }); } catch(e) { console.warn(e); } }
 
       const order = {
         id: orderRow.id, code: orderRow.order_code, restaurantId: r.id, restaurantName: r.name, restaurantEmoji: r.emoji,
-        items: cartLines, subtotal, deliveryFee, total, address: addr, payment: checkoutPayment,
-        date: new Date().toLocaleString('th-TH'), status: 'pending', riderId: null,
+        items: cartLines, subtotal, deliveryFee, discountAmount, discountCode, total, address: addr, payment: checkoutPayment,
+        date: new Date().toLocaleString('th-TH'), status: 'pending', riderId: null, isSelfDelivery,
+        dropoffLat: dropLat, dropoffLng: dropLng,
       };
       state.orders.unshift(order);
       state.activeOrder = order;
-      clearCart(); activeSheet = null;
+      clearCart(); resetCheckoutExtras(); activeSheet = null;
       setView('tracking');
       subscribeToOrder(order.id);
-      showToast('สั่งซื้อสำเร็จ! ร้านค้าได้รับออเดอร์ของคุณแล้ว');
+      showToast('สั่งซื้อสำเร็จ! ' + (isSelfDelivery ? 'ร้านค้าได้รับออเดอร์ของคุณแล้ว' : 'กำลังหาไรเดอร์ให้คุณ'));
     } catch (err) {
       console.error(err);
       showToast('สั่งซื้อไม่สำเร็จ ลองใหม่อีกครั้ง');
@@ -708,13 +1010,13 @@ async function placeOrder() {
     // จำลองสถานะในเครื่องนี้เท่านั้น ไม่ถูกส่งไปที่ร้านค้า/ไรเดอร์จริง
     const order = {
       id: orderCode, code: orderCode, restaurantId: r.id, restaurantName: r.name, restaurantEmoji: r.emoji,
-      items: cartLines, subtotal, deliveryFee, total, address: addr, payment: checkoutPayment,
-      date: new Date().toLocaleString('th-TH'), status: 'pending', riderId: null, demo: true,
+      items: cartLines, subtotal, deliveryFee, discountAmount, discountCode, total, address: addr, payment: checkoutPayment,
+      date: new Date().toLocaleString('th-TH'), status: 'pending', riderId: null, demo: true, isSelfDelivery,
     };
     state.orders.unshift(order);
     state.activeOrder = order;
     saveOrders();
-    clearCart(); activeSheet = null;
+    clearCart(); resetCheckoutExtras(); activeSheet = null;
     setView('tracking');
     if (dataSource === 'supabase' && !state.customerId) {
       showToast('⚠️ ยังสั่งจริงไม่ได้ — ต้องเปิด Allow anonymous sign-ins ใน Supabase ก่อน (ตอนนี้เป็นแค่ตัวอย่าง)');
@@ -744,16 +1046,44 @@ function subscribeToOrder(orderId) {
   if (orderChannel) { supabaseClient.removeChannel(orderChannel); orderChannel = null; }
   orderChannel = supabaseClient
     .channel('order_track_' + orderId)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, payload => {
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, async payload => {
       const o = state.orders.find(x => x.id === orderId);
       if (!o) return;
       o.status = payload.new.status;
       o.riderId = payload.new.rider_id;
       if (state.activeOrder && state.activeOrder.id === orderId) state.activeOrder = o;
+      if (o.riderId && !o.riderInfo) await fetchRiderInfo(o);
       if (o.riderId) subscribeToRiderGps(o.riderId);
       if (state.view === 'tracking') render();
     })
     .subscribe();
+  subscribeCallChannel(orderId);
+  subscribeChatMessages(orderId);
+  loadChatMessages(orderId);
+}
+async function fetchRiderInfo(order) {
+  try {
+    const { data, error } = await supabaseClient.from('riders').select('name,plate,rating,phone').eq('id', order.riderId).maybeSingle();
+    if (error) throw error;
+    order.riderInfo = data;
+  } catch (err) { console.warn('fetchRiderInfo failed', err); }
+}
+let lastEtaCheck = 0;
+let etaMinutes = null;
+async function computeOsrmEta(originLat, originLng, destLat, destLng) {
+  const now = Date.now();
+  if (now - lastEtaCheck < 15000) return; // จำกัดไม่ให้ยิง OSRM ถี่เกินไป
+  lastEtaCheck = now;
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data && data.routes && data.routes[0]) {
+      etaMinutes = Math.max(1, Math.round(data.routes[0].duration / 60));
+      const etaEl = document.getElementById('eta-text');
+      if (etaEl) etaEl.textContent = `ประมาณ ${etaMinutes} นาที`;
+    }
+  } catch (err) { console.warn('OSRM ETA failed', err); }
 }
 function subscribeToRiderGps(riderId) {
   if (!supabaseClient || !riderId) return;
@@ -766,6 +1096,8 @@ function subscribeToRiderGps(riderId) {
       if (!riderMarker) riderMarker = L.marker([row.lat, row.lng], { icon: carIconRef }).addTo(liveMap);
       else riderMarker.setLatLng([row.lat, row.lng]);
       liveMap.panTo([row.lat, row.lng]);
+      const o = state.activeOrder;
+      if (o && o.dropoffLat && o.dropoffLng) computeOsrmEta(row.lat, row.lng, o.dropoffLat, o.dropoffLng);
     })
     .subscribe();
 }
@@ -773,7 +1105,7 @@ async function refreshMyOrders() {
   try {
     const { data, error } = await supabaseClient
       .from('orders')
-      .select('id,order_code,status,subtotal,delivery_fee,total,address,payment_method,created_at,rider_id,restaurants(name,emoji),order_items(name,emoji,qty,price)')
+      .select('id,order_code,status,subtotal,delivery_fee,total,address,payment_method,created_at,rider_id,is_self_delivery,dropoff_lat,dropoff_lng,discount_code,discount_amount,restaurants(name,emoji),order_items(name,emoji,qty,price)')
       .eq('customer_id', state.customerId)
       .order('created_at', { ascending: false })
       .limit(30);
@@ -784,16 +1116,22 @@ async function refreshMyOrders() {
       restaurantEmoji: o.restaurants ? o.restaurants.emoji : '🍽️',
       items: o.order_items || [], subtotal: o.subtotal, deliveryFee: o.delivery_fee, total: o.total,
       address: o.address, payment: o.payment_method, date: new Date(o.created_at).toLocaleString('th-TH'),
-      riderId: o.rider_id,
+      riderId: o.rider_id, riderInfo: null, isSelfDelivery: o.is_self_delivery,
+      dropoffLat: o.dropoff_lat, dropoffLng: o.dropoff_lng,
+      discountCode: o.discount_code, discountAmount: o.discount_amount,
     }));
   } catch (err) { console.warn('refresh orders failed', err); }
 }
-function openOrderTracking(id) {
+async function openOrderTracking(id) {
   const o = state.orders.find(x => x.id === id);
   if (!o) return;
   state.activeOrder = o;
   setView('tracking');
-  if (dataSource === 'supabase') subscribeToOrder(o.id);
+  if (dataSource === 'supabase') {
+    if (o.riderId && !o.riderInfo) await fetchRiderInfo(o);
+    subscribeToOrder(o.id);
+    render();
+  }
 }
 
 /* ============ RENDER: SHARED ============ */
@@ -802,9 +1140,12 @@ function demoBannerHtml() {
   return `<div style="margin:8px 18px 0;background:var(--secondary);color:#241B15;font-size:11.5px;font-weight:700;padding:9px 14px;border-radius:10px;line-height:1.5;">⚠️ ยังไม่เชื่อมฐานข้อมูลจริง (ใส่ Supabase anon key ในโค้ด) — ตอนนี้แสดงข้อมูลตัวอย่างเท่านั้น ออเดอร์จะไม่ถูกส่งไปที่ร้านค้าหรือไรเดอร์จริง</div>`;
 }
 function topbar() {
+  const logoHtml = appLogoUrl
+    ? `<img src="${appLogoUrl}" style="width:36px;height:36px;border-radius:10px;object-fit:cover;">`
+    : `<div class="logo-mark">อ</div>`;
   return `
   <div class="topbar">
-    <div class="logo"><div class="logo-mark">อ</div><div class="logo-text">อิ่มด่วน</div></div>
+    <div class="logo">${logoHtml}<div class="logo-text">อิ่มด่วน</div></div>
     <div class="addr-pill">📍 ส่งไปที่ บ้าน • สุขุมวิท</div>
     <button class="icon-btn" onclick="goToOrders()">🧾</button>
     <button class="icon-btn" onclick="openCartSheet()">🛒${cartCount()>0?`<span class="cart-badge">${cartCount()}</span>`:''}</button>
@@ -867,7 +1208,7 @@ function restaurantListHtml(list) {
     <button class="rest-card" onclick="openRestaurant('${r.id}')">
       <div class="rest-thumb" style="background:${r.color}">${r.emoji}</div>
       <div class="rest-info">
-        <div class="rest-name-row"><div class="rest-name">${r.name}</div>${r.promo ? `<div class="promo-tag">${r.promo}</div>` : ''}</div>
+        <div class="rest-name-row"><div class="rest-name">${r.name}</div>${r.selfDelivery ? `<div class="promo-tag">🎉 ส่งฟรี</div>` : (r.promo ? `<div class="promo-tag">${r.promo}</div>` : '')}</div>
         <div class="rest-tags">${r.tags}</div>
         <div class="rest-meta"><span>⭐ <b>${r.rating}</b></span><span>🕐 <b>${r.time}</b></span><span><b>${r.price}</b></span></div>
       </div>
@@ -949,14 +1290,15 @@ function cartSheetHtml() {
       </div>
     </div>`;
   }).join('');
-  const subtotal = cartSubtotal(); const deliveryFee = 15;
+  const subtotal = cartSubtotal(); const deliveryFee = r.selfDelivery ? 0 : 15;
   return `
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-title"><h2>ตะกร้าจาก ${r.name}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    ${r.selfDelivery ? `<div class="promo-tag" style="margin-bottom:10px;display:inline-block;">🎉 ส่งฟรีโดยทางร้าน</div>` : ''}
     ${lines}
     <div class="summary-row"><span>ราคาอาหาร</span><span>${money(subtotal)}</span></div>
-    <div class="summary-row"><span>ค่าจัดส่ง</span><span>${money(deliveryFee)}</span></div>
+    <div class="summary-row"><span>ค่าจัดส่ง</span><span>${deliveryFee===0 ? 'ฟรี' : money(deliveryFee)}</span></div>
     <div class="summary-row total"><span>ยอดรวม</span><span>${money(subtotal + deliveryFee)}</span></div>
     <button class="btn-primary" onclick="openCheckoutSheet()">ดำเนินการสั่งซื้อ</button>
     <button class="btn-secondary" onclick="closeSheet()">เลือกเมนูเพิ่ม</button>
@@ -964,7 +1306,8 @@ function cartSheetHtml() {
 }
 function checkoutSheetHtml() {
   const r = findRestaurant(state.cart.restaurantId);
-  const subtotal = cartSubtotal(); const deliveryFee = 15;
+  const subtotal = cartSubtotal(); const deliveryFee = r && r.selfDelivery ? 0 : 15;
+  const total = Math.max(0, subtotal + deliveryFee - checkoutDiscount.amount);
   const payOptions = [
     { id: 'cash', label: '💵 เงินสดปลายทาง' },
     { id: 'card', label: '💳 บัตรเครดิต/เดบิต' },
@@ -974,6 +1317,7 @@ function checkoutSheetHtml() {
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-title"><h2>ยืนยันคำสั่งซื้อ</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    ${r && r.selfDelivery ? `<div class="promo-tag" style="margin-bottom:10px;display:inline-block;">🎉 ส่งฟรีโดยทางร้าน</div>` : ''}
 
     <div class="field-label">ชื่อผู้รับ</div>
     <input class="field-input" id="name-input" placeholder="ชื่อ-นามสกุล">
@@ -982,7 +1326,11 @@ function checkoutSheetHtml() {
     <input class="field-input" id="phone-input" placeholder="08xxxxxxxx">
 
     <div class="field-label">ที่อยู่จัดส่ง</div>
-    <textarea class="field-input" id="addr-input" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด...">99/1 ซอยสุขุมวิท 24 คลองตัน วัฒนา กรุงเทพฯ</textarea>
+    <div style="display:flex;gap:8px;">
+      <textarea class="field-input" id="addr-input" style="flex:1;" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด...">99/1 ซอยสุขุมวิท 24 คลองตัน วัฒนา กรุงเทพฯ</textarea>
+      <button type="button" class="icon-btn" style="flex-shrink:0;height:44px;" onclick="useGpsForAddress()" title="ใช้ตำแหน่งปัจจุบัน">📍</button>
+    </div>
+    <div id="gps-status-label" style="font-size:11px;color:var(--text-muted);margin-top:4px;">${checkoutGpsCoords ? '✅ ปักหมุดตำแหน่งปัจจุบันแล้ว' : 'กดปุ่ม 📍 เพื่อดึงที่อยู่จากตำแหน่งปัจจุบันอัตโนมัติ'}</div>
 
     <div class="field-label">วิธีชำระเงิน</div>
     ${payOptions.map(p => `
@@ -990,16 +1338,70 @@ function checkoutSheetHtml() {
         <div class="dot"></div>${p.label}
       </div>`).join('')}
 
+    <div class="field-label">โค้ดส่วนลด</div>
+    <div style="display:flex;gap:8px;">
+      <input class="field-input" id="discount-input" style="flex:1;text-transform:uppercase;" placeholder="กรอกโค้ดส่วนลด (ถ้ามี)" value="${checkoutDiscount.code||''}">
+      <button type="button" class="btn-secondary" style="width:auto;flex-shrink:0;padding:0 16px;" onclick="applyDiscountCode()">ใช้โค้ด</button>
+    </div>
+    <div id="discount-status-label" style="font-size:11px;margin-top:4px;color:${checkoutDiscount.amount>0?'var(--primary)':'var(--text-muted)'}">${checkoutDiscount.amount>0 ? `✅ ใช้โค้ด "${checkoutDiscount.code}" ลดไป ${money(checkoutDiscount.amount)}` : ''}</div>
+
     <div class="field-label">หมายเหตุถึงร้าน (ถ้ามี)</div>
     <textarea class="field-input" id="note-input" placeholder="เช่น ไม่ใส่ผักชี, เผ็ดน้อย"></textarea>
 
     <div class="summary-row" style="margin-top:10px"><span>ร้าน ${r ? r.name : ''}</span><span></span></div>
     <div class="summary-row"><span>ราคาอาหาร</span><span>${money(subtotal)}</span></div>
-    <div class="summary-row"><span>ค่าจัดส่ง</span><span>${money(deliveryFee)}</span></div>
-    <div class="summary-row total"><span>ยอดรวมทั้งหมด</span><span>${money(subtotal + deliveryFee)}</span></div>
+    <div class="summary-row"><span>ค่าจัดส่ง</span><span>${deliveryFee===0?'ฟรี':money(deliveryFee)}</span></div>
+    ${checkoutDiscount.amount>0 ? `<div class="summary-row" style="color:var(--primary)"><span>ส่วนลด (${checkoutDiscount.code})</span><span>-${money(checkoutDiscount.amount)}</span></div>` : ''}
+    <div class="summary-row total"><span>ยอดรวมทั้งหมด</span><span>${money(total)}</span></div>
 
-    <button class="btn-primary" onclick="placeOrder()">สั่งซื้อเลย • ${money(subtotal + deliveryFee)}</button>
+    <button class="btn-primary" onclick="placeOrder()">สั่งซื้อเลย • ${money(total)}</button>
   </div>`;
+}
+async function useGpsForAddress(){
+  if (!('geolocation' in navigator)) { showToast('อุปกรณ์นี้ไม่รองรับ GPS'); return; }
+  const label = document.getElementById('gps-status-label');
+  if (label) label.textContent = '📡 กำลังค้นหาตำแหน่ง...';
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    checkoutGpsCoords = { lat, lng };
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=th`);
+      const data = await res.json();
+      const addrInput = document.getElementById('addr-input');
+      if (data && data.display_name && addrInput) addrInput.value = data.display_name;
+      if (label) label.textContent = '✅ ปักหมุดตำแหน่งปัจจุบันแล้ว — ตรวจสอบที่อยู่ก่อนสั่งซื้อ';
+      showToast('📍 ใช้ตำแหน่งปัจจุบันแล้ว');
+    } catch (err) {
+      console.warn('reverse geocode failed', err);
+      if (label) label.textContent = '✅ ได้พิกัดแล้ว (กรอกที่อยู่เพิ่มเติมเองได้)';
+    }
+  }, () => {
+    if (label) label.textContent = '⚠️ ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตสิทธิ์ GPS';
+    showToast('ไม่สามารถเข้าถึงตำแหน่งได้');
+  }, { enableHighAccuracy: true, timeout: 8000 });
+}
+async function applyDiscountCode(){
+  const input = document.getElementById('discount-input');
+  const code = input ? input.value.trim() : '';
+  const label = document.getElementById('discount-status-label');
+  if (!code) { checkoutDiscount = { code: null, amount: 0 }; openSheet('checkout'); return; }
+  if (dataSource !== 'supabase' || !supabaseClient) { showToast('ใช้โค้ดได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  const subtotal = cartSubtotal();
+  try {
+    const { data, error } = await supabaseClient.rpc('validate_promo_code', { p_code: code, p_subtotal: subtotal });
+    if (error) throw error;
+    const result = Array.isArray(data) ? data[0] : data;
+    if (result && result.valid) {
+      checkoutDiscount = { code: code.toUpperCase(), amount: Number(result.discount) };
+      showToast('✅ ' + result.message);
+    } else {
+      checkoutDiscount = { code: null, amount: 0 };
+      showToast('⚠️ ' + (result ? result.message : 'โค้ดไม่ถูกต้อง'));
+    }
+  } catch (err) {
+    console.error(err); showToast('ตรวจสอบโค้ดไม่สำเร็จ');
+  }
+  openSheet('checkout');
 }
 
 /* ============ RENDER: PROFILE / LOGIN SHEET ============ */
@@ -1045,26 +1447,56 @@ function profileSheetHtml() {
 function renderTracking() {
   const o = state.activeOrder || state.orders[0];
   if (!o) return `<div class="empty-state">ไม่พบคำสั่งซื้อ</div>`;
-  const info = STATUS_MAP[o.status] || STATUS_MAP.pending;
-  const stepIdx = Math.max(0, STATUS_ORDER.indexOf(o.status));
+  const statusMap = o.isSelfDelivery ? STATUS_MAP_SELF : STATUS_MAP;
+  const info = statusMap[o.status] || statusMap.pending;
+  const STAGE_ICONS = ['👨‍🍳','🛵','✅'];
   setTimeout(() => initLiveTrackingMap(o), 100);
   return `
   ${topbar()}
   <div class="track-wrap">
+    <div class="track-header">
+      <div class="track-order-code">#${o.code || o.id}</div>
+      ${o.status!=='delivered' && o.status!=='cancelled' && !o.demo ? `<div class="gpr-indicator"><span class="gpr-dot"></span>GPRS</div>` : ''}
+    </div>
     <div class="track-card">
       <div class="track-emoji">${info.emoji}</div>
       <div class="track-status">${info.label}</div>
       <div class="track-sub">${o.status==='cancelled' ? 'ติดต่อร้านค้าหรือฝ่ายบริการลูกค้า' : (o.status==='delivered' ? 'ขอบคุณที่ใช้บริการอิ่มด่วน 🎉' : (o.demo ? 'โหมดตัวอย่าง (ยังไม่เชื่อมฐานข้อมูล)' : 'ระบบจะอัปเดตสถานะให้อัตโนมัติ'))}</div>
       <div class="progress-bar"><div class="progress-fill" style="width:${info.pct}%"></div></div>
-      <div class="steps">${STATUS_ORDER.map((s,i) => `<span class="${i<=stepIdx?'on':''}">${i+1}</span>`).join('')}</div>
-      <div class="order-id">เลขคำสั่งซื้อ #${o.code || o.id}</div>
+
+      <div class="stage-row">
+        ${TRACK_STAGES.map((label,i) => `
+          <div class="stage-item ${info.stage>i?'done':(info.stage===i?'active':'')}">
+            <div class="stage-dot">${info.stage>i?'✓':STAGE_ICONS[i]}</div>
+            <div class="stage-label">${label}</div>
+          </div>`).join('')}
+      </div>
+
+      ${(o.status==='picked_up') ? `<div class="eta-badge">⏱️ <span id="eta-text">${etaMinutes ? 'ประมาณ '+etaMinutes+' นาที' : 'กำลังคำนวณเวลา...'}</span></div>` : ''}
+      <div class="order-id">เลขคำสั่งซื้อ #${o.code || o.id}${o.isSelfDelivery ? ' · จัดส่งโดยร้านค้าเอง' : ''}</div>
     </div>
     <div id="live-tracking-map"></div>
-    <div class="section-title" style="padding:0"><h2>สรุปคำสั่งซื้อ</h2></div>
+
+    ${(!o.isSelfDelivery && (o.status==='preparing' || o.status==='ready' || o.status==='picked_up') || o.isSelfDelivery && (o.status==='ready' || o.status==='picked_up')) ? `
+    <div class="driver-card">
+      <div class="driver-avatar">${o.isSelfDelivery ? '🏪' : '🏍️'}</div>
+      <div>
+        <div class="driver-name">${o.riderInfo ? o.riderInfo.name : (o.isSelfDelivery ? o.restaurantName : 'กำลังมอบหมายไรเดอร์...')}</div>
+        <div class="driver-meta">${o.riderInfo ? `ทะเบียน ${o.riderInfo.plate||'-'} • คะแนน ${o.riderInfo.rating||'-'} ★` : (o.isSelfDelivery ? 'ทีมจัดส่งของร้าน' : '')}</div>
+      </div>
+      ${!o.isSelfDelivery && o.riderId ? `
+      <div class="driver-actions">
+        <button class="driver-btn call" onclick="startCall()"><i>📞</i></button>
+        <button class="driver-btn chat" onclick="openChat()"><i>💬</i></button>
+      </div>` : ''}
+    </div>` : ''}
+
+    <div class="section-title" style="padding:0;margin-top:16px;"><h2>สรุปคำสั่งซื้อ</h2></div>
     <div class="order-card" style="margin-top:8px">
       <div class="order-card-top"><span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span></div>
       <div class="order-card-items">${o.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
       <div class="order-card-bottom"><span>ส่งไปที่ ${o.address}</span></div>
+      ${o.discountAmount>0 ? `<div class="order-card-bottom"><span style="color:var(--primary)">ส่วนลด (${o.discountCode})</span><span style="color:var(--primary)">-${money(o.discountAmount)}</span></div>` : ''}
       <div class="order-card-bottom"><b>รวม ${money(o.total)}</b></div>
     </div>
     <button class="btn-secondary" onclick="setView('home')">กลับหน้าแรก สั่งเพิ่ม</button>
@@ -1078,6 +1510,10 @@ function initLiveTrackingMap(o) {
   liveMap = L.map('live-tracking-map').setView([13.7563, 100.5018], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(liveMap);
   carIconRef = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png', iconSize: [38,38], iconAnchor: [19,19] });
+  if (o && o.dropoffLat && o.dropoffLng) {
+    L.marker([o.dropoffLat, o.dropoffLng]).addTo(liveMap).bindPopup('จุดส่งของคุณ');
+    liveMap.setView([o.dropoffLat, o.dropoffLng], 14);
+  }
   if (o && o.riderId) subscribeToRiderGps(o.riderId);
 }
 
@@ -1091,7 +1527,8 @@ function renderOrders() {
   ` : `
   <div class="orders-list">
     ${state.orders.map(o => {
-      const info = STATUS_MAP[o.status] || STATUS_MAP.pending;
+      const statusMap = o.isSelfDelivery ? STATUS_MAP_SELF : STATUS_MAP;
+      const info = statusMap[o.status] || statusMap.pending;
       const done = o.status === 'delivered' || o.status === 'cancelled';
       return `
       <div class="order-card" onclick="openOrderTracking('${o.id}')">
@@ -1140,6 +1577,25 @@ function render() {
     div.id = 'overlay-root'; div.className = 'overlay';
     div.onclick = (e) => { if (e.target === div) closeSheet(); };
     div.innerHTML = activeSheet === 'cart' ? cartSheetHtml() : (activeSheet === 'profile' ? profileSheetHtml() : checkoutSheetHtml());
+    document.body.appendChild(div);
+  }
+
+  let chatEl = document.getElementById('chat-root');
+  if (chatEl) chatEl.remove();
+  if (chatOpen) {
+    const div = document.createElement('div');
+    div.id = 'chat-root';
+    div.innerHTML = chatDrawerHtml();
+    document.body.appendChild(div);
+    scrollChatToBottom();
+  }
+
+  let callEl = document.getElementById('call-root');
+  if (callEl) callEl.remove();
+  if (callOpen) {
+    const div = document.createElement('div');
+    div.id = 'call-root';
+    div.innerHTML = callModalHtml();
     document.body.appendChild(div);
   }
 }
