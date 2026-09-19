@@ -137,6 +137,9 @@ const CANCEL_REASON_PRESETS = ['วัตถุดิบหมด','ร้าน
 /* ============ ตัวเลือกเมนู (option groups) ============ */
 let editingItemId = null;      // null = กำลังเพิ่มเมนูใหม่, ไม่ null = กำลังแก้ไขเมนูเดิม
 let draftOptionGroups = [];    // [{ _key, name, selectType:'single'|'multi', required, maxSelect, options:[{_key,emoji,name,price,available}] }]
+let draftBaseFields = { name:'', group:'', price:'', emoji:'', desc:'' }; // กันข้อมูลฟิลด์หลักหาย เวลา sheet ถูกวาดใหม่ (เช่นตอนเพิ่ม/ลบกลุ่มตัวเลือก)
+let draftImageFile = null;             // เก็บไฟล์รูปที่เลือกไว้ กันหายตอน sheet ถูกวาดใหม่
+let draftImagePreviewDataUrl = null;   // เก็บ dataURL ไว้โชว์พรีวิวต่อ หลัง sheet ถูกวาดใหม่
 function newKey(){ return 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 const OPTION_GROUP_PRESETS = {
   spice: { name: 'ระดับความเผ็ด', selectType: 'single', required: true, maxSelect: 1, options: [
@@ -583,11 +586,18 @@ async function updateStorefrontPhoto(){
 }
 
 /* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
-function openAddItemSheet(){ editingItemId = null; draftOptionGroups = []; activeSheet = 'add-item'; render(); }
+function openAddItemSheet(){
+  editingItemId = null; draftOptionGroups = [];
+  draftBaseFields = { name:'', group:'', price:'', emoji:'', desc:'' };
+  draftImageFile = null; draftImagePreviewDataUrl = null;
+  activeSheet = 'add-item'; render();
+}
 async function openEditItemSheet(id){
   const item = state.menu.find(m => m.id === id);
   if (!item) return;
   editingItemId = id; draftOptionGroups = [];
+  draftBaseFields = { name:item.name||'', group:item.group_name||'', price:item.price||'', emoji:item.emoji||'', desc:item.description||'' };
+  draftImageFile = null; draftImagePreviewDataUrl = null;
   activeSheet = 'add-item'; render();
   try {
     const { data, error } = await supabaseClient
@@ -607,21 +617,60 @@ async function openEditItemSheet(id){
     console.warn('โหลดตัวเลือกเมนูไม่สำเร็จ (อาจยังไม่ได้สร้างตาราง menu_item_option_groups)', err);
   }
 }
-function closeSheet(){ activeSheet = null; cancelTarget = null; editingItemId = null; draftOptionGroups = []; render(); }
+function closeSheet(){
+  activeSheet = null; cancelTarget = null; editingItemId = null; draftOptionGroups = [];
+  draftBaseFields = { name:'', group:'', price:'', emoji:'', desc:'' };
+  draftImageFile = null; draftImagePreviewDataUrl = null;
+  render();
+}
 function refreshOverlay(){
   let overlayEl = document.getElementById('overlay-root');
-  if (overlayEl) overlayEl.remove();
+  let savedScroll = 0;
+  if (overlayEl) {
+    const sheetEl = overlayEl.querySelector('.sheet');
+    if (sheetEl) savedScroll = sheetEl.scrollTop;
+    overlayEl.remove();
+  }
   if (activeSheet === 'add-item' || activeSheet === 'cancel-order') {
     const div = document.createElement('div');
     div.id = 'overlay-root'; div.className = 'overlay';
     div.onclick = (e) => { if (e.target === div) closeSheet(); };
     div.innerHTML = activeSheet === 'add-item' ? addItemSheetHtml() : cancelOrderSheetHtml();
     document.body.appendChild(div);
+    if (activeSheet === 'add-item') reattachDraftImage();
+    const newSheetEl = div.querySelector('.sheet');
+    if (newSheetEl) {
+      newSheetEl.scrollTop = savedScroll;
+      requestAnimationFrame(() => { newSheetEl.scrollTop = savedScroll; });
+    }
   }
+}
+/* คืนไฟล์รูปและพรีวิวที่ผู้ใช้เลือกไว้กลับเข้า input หลัง sheet ถูกวาดใหม่ (input file ใหม่จะว่างเปล่าเสมอ) */
+function reattachDraftImage(){
+  const input = document.getElementById('mi-image');
+  const preview = document.getElementById('mi-preview');
+  if (input && draftImageFile) {
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(draftImageFile);
+      input.files = dt.files;
+    } catch (e) { console.warn('reattach image failed', e); }
+  }
+  if (preview && draftImagePreviewDataUrl) { preview.src = draftImagePreviewDataUrl; preview.style.display = 'block'; }
 }
 /* อ่านค่าล่าสุดจาก input/textarea ในกลุ่มตัวเลือกทั้งหมด กลับเข้า draftOptionGroups ก่อนจะสั่ง re-render หรือบันทึก
    ป้องกันข้อมูลที่พิมพ์ค้างหายเวลามีการเพิ่ม/ลบแถว หรือรีเฟรชพื้นหลัง */
 function syncDraftFromDom(){
+  const nameEl0 = document.getElementById('mi-name');
+  const groupEl0 = document.getElementById('mi-group');
+  const priceEl0 = document.getElementById('mi-price');
+  const emojiEl0 = document.getElementById('mi-emoji');
+  const descEl0 = document.getElementById('mi-desc');
+  if (nameEl0) draftBaseFields.name = nameEl0.value;
+  if (groupEl0) draftBaseFields.group = groupEl0.value;
+  if (priceEl0) draftBaseFields.price = priceEl0.value;
+  if (emojiEl0) draftBaseFields.emoji = emojiEl0.value;
+  if (descEl0) draftBaseFields.desc = descEl0.value;
   draftOptionGroups.forEach(g => {
     const nameEl = document.getElementById('og-name-'+g._key);
     if (nameEl) g.name = nameEl.value;
@@ -682,11 +731,14 @@ function setGroupRequired(gkey, val){
 }
 function previewImage(input){
   const preview = document.getElementById('mi-preview');
-  if (!preview) return;
   const file = input.files && input.files[0];
-  if (!file) { preview.style.display = 'none'; return; }
+  draftImageFile = file || null;
+  if (!file) { draftImagePreviewDataUrl = null; if (preview) preview.style.display = 'none'; return; }
   const reader = new FileReader();
-  reader.onload = e => { preview.src = e.target.result; preview.style.display = 'block'; };
+  reader.onload = e => {
+    draftImagePreviewDataUrl = e.target.result;
+    if (preview) { preview.src = e.target.result; preview.style.display = 'block'; }
+  };
   reader.readAsDataURL(file);
 }
 async function toggleMenuItem(id, current){
@@ -1079,18 +1131,19 @@ function optionGroupEditorHtml(){
 }
 function addItemSheetHtml(){
   const item = editingItemId ? state.menu.find(m => m.id === editingItemId) : null;
+  const previewSrc = draftImagePreviewDataUrl || (item && item.image_url) || '';
   return `
   <div class="sheet">
     <div class="sheet-title"><h2>${editingItemId ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่'}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
     <div class="f-label">รูปเมนู (ถ้ามี)</div>
     <input id="mi-image" type="file" accept="image/*" class="f-input" onchange="previewImage(this)">
-    <img id="mi-preview" style="${item && item.image_url ? 'display:block;' : 'display:none;'}width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;" src="${item && item.image_url ? item.image_url : ''}">
-    <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด" value="${item ? item.name.replace(/"/g,'&quot;') : ''}">
+    <img id="mi-preview" style="${previewSrc ? 'display:block;' : 'display:none;'}width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;" src="${previewSrc}">
+    <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด" value="${(draftBaseFields.name||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
     <div class="f-label">หมวดหมู่ในเมนู</div>
-    <select id="mi-group" class="f-input">${MENU_GROUP_OPTIONS.map(g => `<option value="${g}" ${item && item.group_name===g ? 'selected':''}>${g}</option>`).join('')}</select>
-    <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65" value="${item ? item.price : ''}">
-    <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜" value="${item ? (item.emoji||'') : ''}">
-    <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ" value="${item ? (item.description||'').replace(/"/g,'&quot;') : ''}">
+    <select id="mi-group" class="f-input" onchange="syncDraftFromDom()">${MENU_GROUP_OPTIONS.map(g => `<option value="${g}" ${draftBaseFields.group===g ? 'selected':''}>${g}</option>`).join('')}</select>
+    <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65" value="${draftBaseFields.price!=null?draftBaseFields.price:''}" onchange="syncDraftFromDom()">
+    <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜" value="${(draftBaseFields.emoji||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
+    <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ" value="${(draftBaseFields.desc||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
     ${optionGroupEditorHtml()}
     <button class="btn-primary" onclick="saveMenuItem()">${editingItemId ? 'บันทึกการแก้ไข' : 'บันทึกเมนู'}</button>
   </div>`;

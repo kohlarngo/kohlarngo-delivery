@@ -1006,7 +1006,7 @@ function computeOptionSheetItem(){
 }
 function selectSingleOption(groupId, optionId){
   optionSheetSelections[groupId] = [optionId];
-  render();
+  refreshOverlay();
 }
 function toggleMultiOption(groupId, optionId, maxSelect){
   const cur = optionSheetSelections[groupId] || [];
@@ -1016,11 +1016,11 @@ function toggleMultiOption(groupId, optionId, maxSelect){
     if (cur.length >= maxSelect) { showToast(`เลือกได้สูงสุด ${maxSelect} ข้อ`); return; }
     optionSheetSelections[groupId] = [...cur, optionId];
   }
-  render();
+  refreshOverlay();
 }
 function changeOptionSheetQty(delta){
   optionSheetQty = Math.max(1, optionSheetQty + delta);
-  render();
+  refreshOverlay();
 }
 function optionSheetUnitPrice(){
   const item = computeOptionSheetItem();
@@ -1768,9 +1768,33 @@ function renderOrders() {
 }
 
 /* ============ MAIN RENDER ============ */
+function refreshOverlay(){
+  let overlayEl = document.getElementById('overlay-root');
+  let savedScroll = 0;
+  if (overlayEl) {
+    const sheetEl = overlayEl.querySelector('.sheet');
+    if (sheetEl) savedScroll = sheetEl.scrollTop;
+    overlayEl.remove();
+  }
+  if (activeSheet) {
+    const div = document.createElement('div');
+    div.id = 'overlay-root'; div.className = 'overlay';
+    div.onclick = (e) => { if (e.target === div) closeSheet(); };
+    div.innerHTML = activeSheet === 'cart' ? cartSheetHtml() : (activeSheet === 'profile' ? profileSheetHtml() : (activeSheet === 'item-options' ? itemOptionsSheetHtml() : checkoutSheetHtml()));
+    document.body.appendChild(div);
+    const newSheetEl = div.querySelector('.sheet');
+    if (newSheetEl) {
+      newSheetEl.scrollTop = savedScroll;
+      requestAnimationFrame(() => { newSheetEl.scrollTop = savedScroll; });
+    }
+  }
+}
 function render() {
   const app = document.getElementById('app');
   if (state.loading) { app.innerHTML = `<div class="empty-state"><div class="e">⏳</div><h3>กำลังโหลดร้านอาหาร...</h3></div>`; return; }
+  // ถ้ามี sheet เปิดอยู่ (เช่นตะกร้า) การรีเฟรชหน้าหลักข้างหลัง sheet ไม่ควรทำให้หน้าเลื่อนกลับขึ้นบนสุด
+  const preserveScroll = !!activeSheet;
+  const savedWindowScroll = preserveScroll ? window.scrollY : 0;
   let html = '';
   if (state.view === 'home') html = renderHome();
   if (state.view === 'detail') html = renderDetail();
@@ -1789,16 +1813,9 @@ function render() {
   if (state.view === 'detail') nav = '';
 
   app.innerHTML = html + fab + nav;
+  if (preserveScroll) window.scrollTo(0, savedWindowScroll);
 
-  let overlayEl = document.getElementById('overlay-root');
-  if (overlayEl) overlayEl.remove();
-  if (activeSheet) {
-    const div = document.createElement('div');
-    div.id = 'overlay-root'; div.className = 'overlay';
-    div.onclick = (e) => { if (e.target === div) closeSheet(); };
-    div.innerHTML = activeSheet === 'cart' ? cartSheetHtml() : (activeSheet === 'profile' ? profileSheetHtml() : (activeSheet === 'item-options' ? itemOptionsSheetHtml() : checkoutSheetHtml()));
-    document.body.appendChild(div);
-  }
+  refreshOverlay();
 
   let chatEl = document.getElementById('chat-root');
   if (chatEl) chatEl.remove();
