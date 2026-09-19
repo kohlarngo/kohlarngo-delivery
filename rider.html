@@ -641,9 +641,11 @@ function showBrowserNotification(title, body){
 
 function subscribeOrders(){
   if (!supabaseClient || ordersChannel) return;
+  console.log('[realtime] subscribing to rider_orders_watch');
   ordersChannel = supabaseClient
     .channel('rider_orders_watch')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
+      console.log('[realtime] orders payload received:', payload.eventType, payload);
       if (state.view !== 'jobs') return;
       const newJobAvailable = payload.new && payload.new.status === 'pending' && !payload.new.rider_id && !payload.new.is_self_delivery;
       if (newJobAvailable && state.online && !state.activeJob) {
@@ -659,8 +661,18 @@ function subscribeOrders(){
       }
       await refreshAll(); render();
     })
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log('[realtime] subscription status:', status, err || '');
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn('[realtime] subscribe ไม่สำเร็จ:', status, err);
+      }
+    });
 }
+/* ============ AUTO-REFRESH สำรอง (เผื่อ realtime หลุด) ============ */
+/* ดึงงานใหม่ทุก 8 วินาที เป็น fallback เสริมจาก realtime ไม่ได้ใช้แทน */
+setInterval(async () => {
+  if (state.view === 'jobs' && state.online && !state.activeJob) { await refreshAll(); render(); }
+}, 8000);
 
 /* ============ ACTIONS ============ */
 async function toggleOnline(){
