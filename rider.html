@@ -419,6 +419,16 @@ async function afterLogin(){
     if (!data) { state.view = 'setup-profile'; render(); return; }
     state.riderId = data.id; state.riderName = data.name; state.riderPlate = data.plate; state.online = data.status === 'online';
     if (data.status === 'pending') { state.view = 'pending'; render(); return; }
+    if (state.online) {
+      // เข้าระบบมาแล้วสถานะเดิมคือออนไลน์ — ต้องมี GPS ทำงานด้วยเสมอ ถ้าขอสิทธิ์ไม่ได้ ให้บังคับปิดออนไลน์
+      try { await requestGpsPermissionAndStart(); }
+      catch (err) {
+        console.warn(err);
+        state.online = false;
+        try { await supabaseClient.from('riders').update({ status: 'offline' }).eq('id', state.riderId); } catch(e) { console.warn(e); }
+        showToast('⚠️ ปิดสถานะออนไลน์ให้อัตโนมัติ เนื่องจากไม่มีสิทธิ์ GPS กรุณาเปิด GPS แล้วกดออนไลน์อีกครั้ง');
+      }
+    }
     await refreshAll();
     state.view = 'jobs'; render();
     subscribeOrders();
@@ -675,25 +685,50 @@ setInterval(async () => {
 }, 8000);
 
 /* ============ ACTIONS ============ */
+/* GPS ต้องเปิดตลอดเวลาที่ออนไลน์ — ไม่มีสวิตช์เปิด/ปิด GPS แยกให้ไรเดอร์กดเองอีกต่อไป
+   ออนไลน์ = ขอสิทธิ์ + เริ่มส่งพิกัดทันที, ออฟไลน์ = หยุดส่งพิกัดทันที */
+function requestGpsPermissionAndStart(){
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) { reject(new Error('no-geolocation')); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { startGpsTracking(); sendGpsToSupabase(pos); resolve(); },
+      (err) => { reject(err); },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
+  });
+}
+function startGpsTracking(){
+  if (gpsActive) return;
+  watchGpsId = navigator.geolocation.watchPosition(sendGpsToSupabase, handleGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+  gpsActive = true;
+}
+function stopGpsTracking(){
+  if (watchGpsId !== null) navigator.geolocation.clearWatch(watchGpsId);
+  gpsActive = false; watchGpsId = null;
+}
 async function toggleOnline(){
-  state.online = !state.online;
+  if (!state.online) {
+    // จะออนไลน์ — ต้องเปิด/อนุญาต GPS ก่อนเสมอ ถ้าไม่ได้สิทธิ์ จะออนไลน์ไม่ได้
+    try {
+      await requestGpsPermissionAndStart();
+    } catch (err) {
+      console.warn(err);
+      if (err && err.message === 'no-geolocation') { alert('อุปกรณ์นี้ไม่รองรับ GPS ไม่สามารถออนไลน์รับงานได้'); }
+      else { showToast('⚠️ ต้องเปิดสิทธิ์ GPS ก่อนถึงจะออนไลน์รับงานได้ กรุณากดอนุญาตตำแหน่งแล้วลองอีกครั้ง'); }
+      render();
+      return;
+    }
+    state.online = true;
+    showToast('🟢 ออนไลน์แล้ว กำลังส่งพิกัด GPS ให้ลูกค้าแบบ Realtime');
+  } else {
+    state.online = false;
+    stopGpsTracking();
+  }
   if (dataSource === 'supabase') {
     try {
       await supabaseClient.from('riders').update({ status: state.online ? 'online' : 'offline' }).eq('id', state.riderId);
       if (state.online) await refreshAll();
     } catch (err) { console.warn(err); }
-  }
-  render();
-}
-async function toggleGpsTracking() {
-  if (!gpsActive) {
-    if ("geolocation" in navigator) {
-      watchGpsId = navigator.geolocation.watchPosition(sendGpsToSupabase, handleGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
-      gpsActive = true; showToast('📡 เปิดระบบส่งพิกัด GPS เรียบร้อย');
-    } else { alert("อุปกรณ์นี้ไม่รองรับ GPS"); }
-  } else {
-    if (watchGpsId !== null) navigator.geolocation.clearWatch(watchGpsId);
-    gpsActive = false; showToast('⏹️ ปิดการส่งพิกัด GPS');
   }
   render();
 }
@@ -703,7 +738,18 @@ async function sendGpsToSupabase(position) {
   const { error } = await supabaseClient.from('gps_locations').upsert({ rider_id: state.riderId, lat, lng, updated_at: new Date() });
   if (error) console.error('GPS Update Error:', error);
 }
-function handleGpsError(err) { showToast('⚠️ ไม่สามารถเข้าถึง GPS กรุณากดอนุญาตสิทธิ์'); }
+function handleGpsError(err) {
+  showToast('⚠️ ไม่สามารถเข้าถึง GPS กรุณาเปิดสิทธิ์ตำแหน่ง — ระบบจะปิดสถานะออนไลน์ให้อัตโนมัติ');
+  // ระหว่างออนไลน์ถ้าสัญญาณ/สิทธิ์ GPS หลุด ต้องบังคับออฟไลน์ทันที เพราะห้ามออนไลน์โดยไม่มี GPS
+  if (state.online) {
+    state.online = false;
+    stopGpsTracking();
+    if (dataSource === 'supabase' && state.riderId) {
+      supabaseClient.from('riders').update({ status: 'offline' }).eq('id', state.riderId).then(()=>{}).catch(e=>console.warn(e));
+    }
+    render();
+  }
+}
 
 async function acceptJob(id){
   if (dataSource === 'mock') {
@@ -711,7 +757,7 @@ async function acceptJob(id){
     if (!j) return;
     state.activeJob = {...j, step:0};
     state.availableJobs = state.availableJobs.filter(x=>x.id!==id);
-    if (!gpsActive) toggleGpsTracking();
+    if (!gpsActive) startGpsTracking();
     render();
     return;
   }
@@ -721,7 +767,7 @@ async function acceptJob(id){
       .eq('id', id).is('rider_id', null).eq('status','pending').select();
     if (error) throw error;
     if (!data || data.length === 0) { showToast('งานนี้ถูกไรเดอร์คนอื่นรับไปแล้ว'); await refreshAvailableJobs(); render(); return; }
-    if (!gpsActive) toggleGpsTracking();
+    if (!gpsActive) startGpsTracking();
     showToast('✅ รับงานแล้ว ร้านค้าได้รับแจ้งให้เริ่มปรุงอาหาร');
     await refreshAll(); render();
   } catch (err) { console.error(err); showToast('รับงานไม่สำเร็จ ลองใหม่อีกครั้ง'); }
@@ -879,11 +925,10 @@ function topbar(){
 function renderJobs(){
   if (state.activeJob) return renderActiveJob();
   return `
-  <div class="gps-box">
-    <div><b>ส่งพิกัด GPS แบบ Realtime</b><br><span style="font-size:11px;color:var(--text-muted)">สถานะ: ${gpsActive?'กำลังส่งพิกัด...':'ปิดอยู่'}</span></div>
-    <button class="switch ${gpsActive?'on':''}" onclick="toggleGpsTracking()"></button>
-  </div>
-  ${!state.online ? `<div class="empty-state"><div class="e">🌙</div><h3>คุณออฟไลน์อยู่</h3><p>เปิดสวิตช์ออนไลน์ด้านบนเพื่อเริ่มรับงาน</p></div>` : `
+  ${state.online ? `<div class="gps-box">
+    <div><b>ส่งพิกัด GPS แบบ Realtime</b><br><span style="font-size:11px;color:var(--text-muted)">สถานะ: ${gpsActive?'🟢 กำลังส่งพิกัด... (บังคับเปิดขณะออนไลน์)':'⚠️ กำลังเชื่อมต่อ...'}</span></div>
+  </div>` : ''}
+  ${!state.online ? `<div class="empty-state"><div class="e">🌙</div><h3>คุณออฟไลน์อยู่</h3><p>เปิดสวิตช์ออนไลน์ด้านบนเพื่อเริ่มรับงาน (ระบบจะขอสิทธิ์ GPS ให้อัตโนมัติ — ต้องอนุญาต GPS จึงจะออนไลน์ได้)</p></div>` : `
   <div class="section-title"><h2>งานที่พร้อมรับ</h2></div>
   ${state.availableJobs.length === 0 ? `<div class="empty-state"><div class="e">🔍</div><h3>ยังไม่มีงานตอนนี้</h3><p>รอสักครู่ งานใหม่จะขึ้นที่นี่โดยอัตโนมัติ</p></div>` :
   state.availableJobs.map(j => `
@@ -911,8 +956,7 @@ function renderActiveJob(){
     </div>
   </div>
   <div class="gps-box">
-    <span class="gps-status">${gpsActive ? '🟢 ส่งตำแหน่ง GPS ให้ลูกค้าแบบ Real-time' : '🔴 GPS ปิดอยู่'}</span>
-    <button class="btn-accept" style="margin:0;width:auto;padding:6px 12px;" onclick="toggleGpsTracking()">${gpsActive?'ปิด':'เปิด GPS'}</button>
+    <span class="gps-status">${gpsActive ? '🟢 ส่งตำแหน่ง GPS ให้ลูกค้าแบบ Real-time' : '⚠️ กำลังเชื่อมต่อ GPS...'}</span>
   </div>
   ${btn ? `<button class="btn-big" onclick="advanceJob()">${btn}</button>` : ''}
   `;

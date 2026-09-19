@@ -131,6 +131,43 @@ let state = {
 };
 let ordersChannel = null;
 let activeSheet = null;
+let cancelTarget = null; // { id, fromStatus }
+const CANCEL_REASON_PRESETS = ['วัตถุดิบหมด','ร้านปิดกะทันหัน/มีเหตุขัดข้อง','ออเดอร์ผิดพลาด/ราคาไม่ตรง','ลูกค้าขอยกเลิก','ที่อยู่จัดส่งอยู่นอกพื้นที่'];
+
+/* ============ ตัวเลือกเมนู (option groups) ============ */
+let editingItemId = null;      // null = กำลังเพิ่มเมนูใหม่, ไม่ null = กำลังแก้ไขเมนูเดิม
+let draftOptionGroups = [];    // [{ _key, name, selectType:'single'|'multi', required, maxSelect, options:[{_key,emoji,name,price,available}] }]
+function newKey(){ return 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+const OPTION_GROUP_PRESETS = {
+  spice: { name: 'ระดับความเผ็ด', selectType: 'single', required: true, maxSelect: 1, options: [
+    { emoji:'🌶️', name:'เผ็ดมาก (Very Spicy)', price:0 },
+    { emoji:'🌶️', name:'เผ็ดปานกลาง (Spicy)', price:0 },
+    { emoji:'🌶️', name:'เผ็ดน้อย (A bit spicy)', price:0 },
+    { emoji:'⚪', name:'ไม่ใส่พริก (No Spicy)', price:0 },
+  ]},
+  protein: { name:'ประเภทเนื้อ/วัตถุดิบ', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'🐷', name:'หมูสับ', price:0 },
+    { emoji:'🍗', name:'ไก่สับ', price:0 },
+    { emoji:'🐄', name:'เนื้อวัว', price:15 },
+    { emoji:'🦐', name:'กุ้ง', price:15 },
+    { emoji:'🦆', name:'เป็ด', price:20 },
+    { emoji:'🐟', name:'ปลา', price:10 },
+    { emoji:'🥢', name:'เจ/มังสวิรัติ', price:0 },
+  ]},
+  egg: { name:'เพิ่มไข่', selectType:'multi', required:false, maxSelect:1, options: [
+    { emoji:'🍳', name:'ไข่ดาว', price:15 },
+    { emoji:'🍳', name:'ไข่เจียว', price:20 },
+    { emoji:'🥚', name:'ไข่ต้ม', price:15 },
+  ]},
+  spoon: { name:'ช้อนส้อมพลาสติก', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'✅', name:'รับ', price:0 },
+    { emoji:'🚫', name:'ไม่รับ', price:0 },
+  ]},
+};
+function presetToDraftGroup(preset){
+  return { _key:newKey(), name:preset.name, selectType:preset.selectType, required:preset.required, maxSelect:preset.maxSelect,
+    options: preset.options.map(o => ({ _key:newKey(), emoji:o.emoji, name:o.name, price:o.price, available:true })) };
+}
 
 function showToast(msg){
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
@@ -363,7 +400,7 @@ async function refreshOrders(){
   try {
     const { data, error } = await supabaseClient
       .from('orders')
-      .select('id,order_code,status,total,address,note,created_at,is_self_delivery,rider_id,order_items(name,emoji,qty,price)')
+      .select('id,order_code,status,total,address,note,created_at,is_self_delivery,rider_id,order_items(name,emoji,qty,price,selected_options)')
       .eq('restaurant_id', state.restaurantId)
       .in('status', ['pending','preparing','ready','picked_up'])
       .order('created_at', { ascending: true });
@@ -380,10 +417,17 @@ async function refreshOrders(){
 async function refreshMenu(){
   try {
     const { data, error } = await supabaseClient
-      .from('menu_items').select('*').eq('restaurant_id', state.restaurantId).order('group_name').order('name');
+      .from('menu_items').select('*, menu_item_option_groups(id)').eq('restaurant_id', state.restaurantId).order('group_name').order('name');
     if (error) throw error;
     state.menu = data || [];
-  } catch (err) { console.warn('refreshMenu failed', err); }
+  } catch (err) {
+    console.warn('refreshMenu failed (maybe menu_item_option_groups table missing), retrying without it', err);
+    try {
+      const { data, error } = await supabaseClient.from('menu_items').select('*').eq('restaurant_id', state.restaurantId).order('group_name').order('name');
+      if (error) throw error;
+      state.menu = data || [];
+    } catch (err2) { console.warn('refreshMenu failed', err2); }
+  }
 }
 
 /* ============ แจ้งเตือนงานใหม่ (เสียง + Notification เบราว์เซอร์) ============ */
@@ -429,7 +473,7 @@ function subscribeOrders(){
         showBrowserNotification('🔔 มีออเดอร์ใหม่เข้ามา!', `ออเดอร์ #${payload.new.order_code || ''} รอการยืนยัน`);
         showToast('🔔 มีออเดอร์ใหม่เข้ามา!');
       }
-      await refreshOrders(); render();
+      await refreshOrders(); if (!activeSheet) render();
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
       console.log('[realtime] UPDATE payload received:', payload);
@@ -439,7 +483,7 @@ function subscribeOrders(){
         showBrowserNotification('👨‍🍳 มีไรเดอร์รับงานแล้ว!', `เริ่มปรุงออเดอร์ #${payload.new.order_code || ''} ได้เลย`);
         showToast('👨‍🍳 ไรเดอร์รับงานแล้ว เริ่มปรุงได้เลย!');
       }
-      await refreshOrders(); render();
+      await refreshOrders(); if (!activeSheet) render();
     })
     .subscribe((status, err) => {
       console.log('[realtime] subscription status:', status, err || '');
@@ -451,7 +495,7 @@ function subscribeOrders(){
 /* ============ AUTO-REFRESH สำรอง (เผื่อ realtime หลุด) ============ */
 /* ดึงออเดอร์ใหม่ทุก 8 วินาที เป็น fallback เสริมจาก realtime ไม่ได้ใช้แทน */
 setInterval(async () => {
-  if (state.view === 'dashboard' && state.restaurantId) { await refreshOrders(); render(); }
+  if (state.view === 'dashboard' && state.restaurantId) { await refreshOrders(); if (!activeSheet) render(); }
 }, 8000);
 
 /* ============ ORDER ACTIONS ============ */
@@ -460,11 +504,33 @@ async function acceptOrder(id){
     showToast('รับออเดอร์แล้ว กำลังปรุงอาหาร'); await refreshOrders(); render();
   } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
 }
-async function rejectOrder(id){
-  if (!confirm('ยืนยันยกเลิกออเดอร์นี้?')) return;
-  try { const { error } = await supabaseClient.from('orders').update({ status: 'cancelled' }).eq('id', id).eq('status','pending'); if (error) throw error;
-    showToast('ยกเลิกออเดอร์แล้ว'); await refreshOrders(); render();
-  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+function openCancelSheet(id, fromStatus){
+  cancelTarget = { id, fromStatus };
+  activeSheet = 'cancel-order';
+  render();
+}
+function pickCancelReason(reason){
+  const el = document.getElementById('cancel-reason-text');
+  if (el) el.value = reason;
+}
+async function confirmCancelOrder(){
+  if (!cancelTarget) return;
+  const reasonEl = document.getElementById('cancel-reason-text');
+  const reason = (reasonEl ? reasonEl.value : '').trim();
+  if (!reason) { showToast('กรุณาระบุเหตุผลที่ยกเลิกออเดอร์'); return; }
+  const { id, fromStatus } = cancelTarget;
+  try {
+    const { error } = await supabaseClient.from('orders')
+      .update({ status: 'cancelled', cancel_reason: reason, cancelled_by: 'merchant' })
+      .eq('id', id).eq('status', fromStatus);
+    if (error) throw error;
+    showToast('ยกเลิกออเดอร์แล้ว');
+    cancelTarget = null; activeSheet = null;
+    await refreshOrders(); render();
+  } catch (err) {
+    console.error(err);
+    showToast('ยกเลิกออเดอร์ไม่สำเร็จ: ' + (err.message||''));
+  }
 }
 async function markReady(id){
   try { const { error } = await supabaseClient.from('orders').update({ status: 'ready' }).eq('id', id).eq('status','preparing'); if (error) throw error;
@@ -517,8 +583,103 @@ async function updateStorefrontPhoto(){
 }
 
 /* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
-function openAddItemSheet(){ activeSheet = 'add-item'; render(); }
-function closeSheet(){ activeSheet = null; render(); }
+function openAddItemSheet(){ editingItemId = null; draftOptionGroups = []; activeSheet = 'add-item'; render(); }
+async function openEditItemSheet(id){
+  const item = state.menu.find(m => m.id === id);
+  if (!item) return;
+  editingItemId = id; draftOptionGroups = [];
+  activeSheet = 'add-item'; render();
+  try {
+    const { data, error } = await supabaseClient
+      .from('menu_item_option_groups')
+      .select('*, menu_item_options(*)')
+      .eq('menu_item_id', id)
+      .order('sort_order');
+    if (error) throw error;
+    draftOptionGroups = (data||[]).map(g => ({
+      _key:newKey(), name:g.name, selectType:g.select_type, required:g.required, maxSelect:g.max_select || 1,
+      options: (g.menu_item_options||[]).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(o => ({
+        _key:newKey(), emoji:o.emoji||'', name:o.name, price:o.price_delta, available: o.is_available !== false,
+      })),
+    }));
+    refreshOverlay();
+  } catch (err) {
+    console.warn('โหลดตัวเลือกเมนูไม่สำเร็จ (อาจยังไม่ได้สร้างตาราง menu_item_option_groups)', err);
+  }
+}
+function closeSheet(){ activeSheet = null; cancelTarget = null; editingItemId = null; draftOptionGroups = []; render(); }
+function refreshOverlay(){
+  let overlayEl = document.getElementById('overlay-root');
+  if (overlayEl) overlayEl.remove();
+  if (activeSheet === 'add-item' || activeSheet === 'cancel-order') {
+    const div = document.createElement('div');
+    div.id = 'overlay-root'; div.className = 'overlay';
+    div.onclick = (e) => { if (e.target === div) closeSheet(); };
+    div.innerHTML = activeSheet === 'add-item' ? addItemSheetHtml() : cancelOrderSheetHtml();
+    document.body.appendChild(div);
+  }
+}
+/* อ่านค่าล่าสุดจาก input/textarea ในกลุ่มตัวเลือกทั้งหมด กลับเข้า draftOptionGroups ก่อนจะสั่ง re-render หรือบันทึก
+   ป้องกันข้อมูลที่พิมพ์ค้างหายเวลามีการเพิ่ม/ลบแถว หรือรีเฟรชพื้นหลัง */
+function syncDraftFromDom(){
+  draftOptionGroups.forEach(g => {
+    const nameEl = document.getElementById('og-name-'+g._key);
+    if (nameEl) g.name = nameEl.value;
+    const maxEl = document.getElementById('og-max-'+g._key);
+    if (maxEl) g.maxSelect = Math.max(1, Number(maxEl.value)||1);
+    g.options.forEach(o => {
+      const eEl = document.getElementById('oo-emoji-'+o._key);
+      const nEl = document.getElementById('oo-name-'+o._key);
+      const pEl = document.getElementById('oo-price-'+o._key);
+      const aEl = document.getElementById('oo-avail-'+o._key);
+      if (eEl) o.emoji = eEl.value;
+      if (nEl) o.name = nEl.value;
+      if (pEl) o.price = Number(pEl.value)||0;
+      if (aEl) o.available = !aEl.checked; // checkbox หมายถึง "ของหมดชั่วคราว"
+    });
+  });
+}
+function addPresetGroup(key){
+  syncDraftFromDom();
+  draftOptionGroups.push(presetToDraftGroup(OPTION_GROUP_PRESETS[key]));
+  refreshOverlay();
+}
+function addCustomGroup(){
+  syncDraftFromDom();
+  draftOptionGroups.push({ _key:newKey(), name:'', selectType:'single', required:true, maxSelect:1, options:[
+    { _key:newKey(), emoji:'', name:'', price:0, available:true },
+  ]});
+  refreshOverlay();
+}
+function removeGroup(gkey){
+  syncDraftFromDom();
+  draftOptionGroups = draftOptionGroups.filter(g => g._key !== gkey);
+  refreshOverlay();
+}
+function addOption(gkey){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.options.push({ _key:newKey(), emoji:'', name:'', price:0, available:true });
+  refreshOverlay();
+}
+function removeOption(gkey, okey){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.options = g.options.filter(o => o._key !== okey);
+  refreshOverlay();
+}
+function setGroupType(gkey, val){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.selectType = val;
+  refreshOverlay();
+}
+function setGroupRequired(gkey, val){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.required = val;
+  refreshOverlay();
+}
 function previewImage(input){
   const preview = document.getElementById('mi-preview');
   if (!preview) return;
@@ -533,7 +694,30 @@ async function toggleMenuItem(id, current){
     await refreshMenu(); render();
   } catch (err) { console.error(err); showToast('อัปเดตเมนูไม่สำเร็จ'); }
 }
-async function addMenuItem(){
+async function saveOptionGroupsForItem(itemId){
+  // ลบกลุ่มตัวเลือกเดิมทั้งหมดของเมนูนี้ (cascade ลบตัวเลือกย่อยไปด้วย) แล้วบันทึกชุดใหม่ทั้งหมดแทน
+  const { error: delErr } = await supabaseClient.from('menu_item_option_groups').delete().eq('menu_item_id', itemId);
+  if (delErr) throw delErr;
+  for (let gi = 0; gi < draftOptionGroups.length; gi++){
+    const g = draftOptionGroups[gi];
+    if (!g.name || !g.name.trim()) continue;
+    const validOptions = g.options.filter(o => o.name && o.name.trim());
+    if (validOptions.length === 0) continue;
+    const { data: gRow, error: gErr } = await supabaseClient.from('menu_item_option_groups').insert({
+      menu_item_id: itemId, name: g.name.trim(), select_type: g.selectType, required: !!g.required,
+      max_select: g.selectType === 'multi' ? Math.max(1, Number(g.maxSelect)||1) : 1, sort_order: gi,
+    }).select().single();
+    if (gErr) throw gErr;
+    const optionsPayload = validOptions.map((o, oi) => ({
+      group_id: gRow.id, emoji: o.emoji || null, name: o.name.trim(), price_delta: Number(o.price)||0,
+      is_available: o.available !== false, sort_order: oi,
+    }));
+    const { error: oErr } = await supabaseClient.from('menu_item_options').insert(optionsPayload);
+    if (oErr) throw oErr;
+  }
+}
+async function saveMenuItem(){
+  syncDraftFromDom();
   const name = document.getElementById('mi-name').value.trim();
   const group = document.getElementById('mi-group').value.trim() || 'เมนู';
   const price = Number(document.getElementById('mi-price').value);
@@ -542,8 +726,13 @@ async function addMenuItem(){
   const fileInput = document.getElementById('mi-image');
   const file = fileInput && fileInput.files && fileInput.files[0];
   if (!name || !price) { showToast('กรอกชื่อเมนูและราคาให้ครบ'); return; }
+  for (const g of draftOptionGroups){
+    if (g.name && g.name.trim() && g.options.filter(o=>o.name&&o.name.trim()).length===0){
+      showToast(`กลุ่ม "${g.name}" ต้องมีตัวเลือกอย่างน้อย 1 ข้อ`); return;
+    }
+  }
   try {
-    let imageUrl = null;
+    let imageUrl = editingItemId ? undefined : null;
     if (file) {
       const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
       const path = `${state.restaurantId}/${Date.now()}_${safeName}`;
@@ -552,14 +741,30 @@ async function addMenuItem(){
       const { data: pub } = supabaseClient.storage.from('menu-images').getPublicUrl(path);
       imageUrl = pub.publicUrl;
     }
-    const { error } = await supabaseClient.from('menu_items').insert({
-      restaurant_id: state.restaurantId, group_name: group, name, price, emoji, description: desc, is_available: true, image_url: imageUrl,
-    });
-    if (error) throw error;
-    showToast('เพิ่มเมนูแล้ว');
+    let itemId = editingItemId;
+    if (editingItemId) {
+      const patch = { group_name: group, name, price, emoji, description: desc };
+      if (imageUrl !== undefined) patch.image_url = imageUrl;
+      const { error } = await supabaseClient.from('menu_items').update(patch).eq('id', editingItemId);
+      if (error) throw error;
+    } else {
+      const { data: newItem, error } = await supabaseClient.from('menu_items').insert({
+        restaurant_id: state.restaurantId, group_name: group, name, price, emoji, description: desc, is_available: true, image_url: imageUrl,
+      }).select().single();
+      if (error) throw error;
+      itemId = newItem.id;
+    }
+    try { await saveOptionGroupsForItem(itemId); }
+    catch(optErr) {
+      console.warn('บันทึกตัวเลือกเมนูไม่สำเร็จ (อาจยังไม่ได้สร้างตาราง menu_item_option_groups / menu_item_options ใน Supabase)', optErr);
+      showToast('บันทึกเมนูแล้ว แต่บันทึกตัวเลือกเพิ่มเติมไม่สำเร็จ — ตรวจสอบว่าสร้างตารางตัวเลือกใน Supabase แล้วหรือยัง');
+      closeSheet(); await refreshMenu(); render();
+      return;
+    }
+    showToast(editingItemId ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มเมนูแล้ว');
     closeSheet();
     await refreshMenu(); render();
-  } catch (err) { console.error(err); showToast('เพิ่มเมนูไม่สำเร็จ: ' + (err.message||'')); }
+  } catch (err) { console.error(err); showToast('บันทึกเมนูไม่สำเร็จ: ' + (err.message||'')); }
 }
 async function deleteMenuItem(id){
   if (!confirm('ลบเมนูนี้?')) return;
@@ -769,7 +974,10 @@ function tabsHtml(){
     </button>`).join('')}</div>`;
 }
 function orderCardHtml(o, actionsHtml, tagClass, tagLabel){
-  const itemsText = (o.order_items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
+  const itemsText = (o.order_items||[]).map(i=>{
+    const opts = (i.selected_options||[]).map(so => so.optionName).join(', ');
+    return `${i.qty}× ${i.name}${opts ? ` <span style="color:var(--text-muted);">(${opts})</span>` : ''}`;
+  }).join('<br>');
   const time = new Date(o.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   return `
   <div class="order-card">
@@ -785,14 +993,14 @@ function orderCardHtml(o, actionsHtml, tagClass, tagLabel){
 function renderNewTab(){
   if (state.newOrders.length === 0) return `<div class="empty-state"><div class="e">🧾</div><h3>ยังไม่มีออเดอร์ใหม่</h3><p>${state.restaurant.self_delivery_enabled ? 'ออเดอร์จากลูกค้าจะขึ้นที่นี่ทันที' : 'เปิดโหมด "จัดส่งเอง" ด้านบนถ้าอยากรับออเดอร์เข้ามาที่แท็บนี้โดยตรง — ตอนนี้ระบบหาไรเดอร์ให้อัตโนมัติก่อนแทน'}</p></div>`;
   return state.newOrders.map(o => orderCardHtml(o, `
-    <div class="order-actions"><button class="btn-mini reject" onclick="rejectOrder('${o.id}')">ปฏิเสธ</button><button class="btn-mini accept" onclick="acceptOrder('${o.id}')">รับออเดอร์</button></div>`, 'pending', 'รอรับออเดอร์')).join('');
+    <div class="order-actions"><button class="btn-mini reject" onclick="openCancelSheet('${o.id}','pending')">ปฏิเสธ</button><button class="btn-mini accept" onclick="acceptOrder('${o.id}')">รับออเดอร์</button></div>`, 'pending', 'รอรับออเดอร์')).join('');
 }
 function renderActiveTab(){
   const total = state.searchingOrders.length + state.preparingOrders.length + state.readyOrders.length + state.pickedUpOrders.length;
   if (total === 0) return `<div class="empty-state"><div class="e">👨‍🍳</div><h3>ไม่มีออเดอร์ที่กำลังทำอยู่</h3></div>`;
   return `
   ${state.searchingOrders.map(o => orderCardHtml(o, `<div class="order-addr" style="margin-top:10px;">🔍 กำลังหาไรเดอร์ให้อัตโนมัติ... ระบบจะแจ้งให้เริ่มปรุงทันทีที่มีไรเดอร์รับงาน</div>`, 'pending', 'หาไรเดอร์')).join('')}
-  ${state.preparingOrders.map(o => orderCardHtml(o, `<div class="order-actions"><button class="btn-mini ready" onclick="markReady('${o.id}')">อาหารพร้อมแล้ว</button></div>`, 'preparing', 'กำลังปรุง')).join('')}
+  ${state.preparingOrders.map(o => orderCardHtml(o, `<div class="order-actions"><button class="btn-mini reject" onclick="openCancelSheet('${o.id}','preparing')">ยกเลิกออเดอร์</button><button class="btn-mini ready" onclick="markReady('${o.id}')">อาหารพร้อมแล้ว</button></div>`, 'preparing', 'กำลังปรุง')).join('')}
   ${state.readyOrders.map(o => o.is_self_delivery
       ? orderCardHtml(o, `<div class="order-actions"><button class="btn-mini ready" onclick="selfDispatch('${o.id}')">🏍️ ออกจัดส่งเอง</button></div>`, 'ready', 'พร้อมส่ง')
       : orderCardHtml(o, `<div class="order-addr" style="margin-top:10px;">🏍️ รอไรเดอร์มารับอาหาร</div>`, 'ready', 'พร้อมส่ง')
@@ -811,27 +1019,80 @@ function renderMenuTab(){
         <div class="menu-item-emoji" style="${m.image_url ? `background-image:url('${m.image_url}');background-size:cover;background-position:center;` : ''}">${m.image_url ? '' : m.emoji}</div>
         <div class="menu-item-info">
           <div class="menu-item-name">${m.name}</div>
-          <div class="menu-item-price">${money(m.price)} ${m.is_available?'':'· ปิดขายชั่วคราว'}</div>
+          <div class="menu-item-price">${money(m.price)} ${m.is_available?'':'· ปิดขายชั่วคราว'}${m.menu_item_option_groups && m.menu_item_option_groups.length ? ` · 🧩 ${m.menu_item_option_groups.length} กลุ่มตัวเลือก` : ''}</div>
         </div>
         <button class="switch ${m.is_available?'on':''}" onclick="toggleMenuItem('${m.id}', ${m.is_available})"></button>
+        <button class="btn-mini outline" style="flex:0 0 auto;padding:8px 10px;margin-left:6px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);" onclick="openEditItemSheet('${m.id}')">✏️</button>
         <button class="btn-mini reject" style="flex:0 0 auto;padding:8px 10px;margin-left:6px;" onclick="deleteMenuItem('${m.id}')">🗑️</button>
       </div>`).join('')}
   `).join('') + `<div style="height:70px"></div>`;
 }
-function addItemSheetHtml(){
+function cancelOrderSheetHtml(){
+  const o = cancelTarget ? [...state.newOrders, ...state.preparingOrders].find(x => x.id === cancelTarget.id) : null;
   return `
   <div class="sheet">
-    <div class="sheet-title"><h2>เพิ่มเมนูใหม่</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="sheet-title"><h2>ยกเลิกออเดอร์${o ? ' #'+o.order_code : ''}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="f-label">เหตุผลที่ยกเลิก (จำเป็นต้องระบุ)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+      ${CANCEL_REASON_PRESETS.map(r => `<button class="btn-mini reject" style="margin:0;" onclick="pickCancelReason('${r.replace(/'/g,"\\'")}')">${r}</button>`).join('')}
+    </div>
+    <textarea id="cancel-reason-text" class="f-input" rows="3" placeholder="ระบุเหตุผล เช่น วัตถุดิบหมด ร้านปิดกะทันหัน ฯลฯ" style="resize:vertical;"></textarea>
+    <button class="btn-primary" style="background:var(--red,#C0392B);margin-top:10px;" onclick="confirmCancelOrder()">ยืนยันยกเลิกออเดอร์</button>
+  </div>`;
+}
+function optionGroupEditorHtml(){
+  return `
+    <div class="f-label" style="margin-top:22px;padding-top:14px;border-top:1px solid var(--border);">ตัวเลือกเพิ่มเติม (ความเผ็ด/ชนิดเนื้อ/ไข่ ฯลฯ)</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">กดปุ่มด้านล่างเพื่อเพิ่มกลุ่มตัวเลือกสำเร็จรูป หรือสร้างกลุ่มของคุณเองก็ได้ ลูกค้าจะเห็นตัวเลือกเหล่านี้ตอนกดสั่งเมนูนี้</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('spice')">🌶️ + ระดับความเผ็ด</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('protein')">🐷 + ชนิดเนื้อ/วัตถุดิบ</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('egg')">🍳 + เพิ่มไข่</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('spoon')">🥄 + ช้อนพลาสติก</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;background:var(--primary);color:var(--primary-ink);border-color:var(--primary);" onclick="addCustomGroup()">✨ + กลุ่มตัวเลือกของฉันเอง</button>
+    </div>
+    ${draftOptionGroups.map(g => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="og-name-${g._key}" class="f-input" style="flex:1;margin:0;font-weight:700;" placeholder="ชื่อกลุ่มตัวเลือก เช่น ระดับความเผ็ด" value="${(g.name||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
+          <button type="button" class="btn-mini reject" style="flex:0 0 auto;padding:8px 10px;margin:0;" onclick="removeGroup('${g._key}')">🗑️</button>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px;">
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="type-${g._key}" ${g.selectType==='single'?'checked':''} onchange="setGroupType('${g._key}','single')"> เลือกได้ 1 ข้อ</label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="type-${g._key}" ${g.selectType==='multi'?'checked':''} onchange="setGroupType('${g._key}','multi')"> เลือกได้หลายข้อ</label>
+          ${g.selectType==='multi' ? `<label style="display:flex;align-items:center;gap:5px;">สูงสุด <input id="og-max-${g._key}" type="number" min="1" value="${g.maxSelect||1}" style="width:48px;border:1px solid var(--border);border-radius:6px;padding:3px 6px;" onchange="syncDraftFromDom()"> ข้อ</label>` : ''}
+          <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" ${g.required?'checked':''} onchange="setGroupRequired('${g._key}', this.checked)"> บังคับให้ลูกค้าเลือก</label>
+        </div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+          ${g.options.map(o => `
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input id="oo-emoji-${o._key}" class="f-input" style="width:44px;margin:0;padding:8px 6px;text-align:center;" placeholder="🌶️" value="${(o.emoji||'').replace(/"/g,'&quot;')}">
+              <input id="oo-name-${o._key}" class="f-input" style="flex:1;margin:0;" placeholder="ชื่อตัวเลือก เช่น เผ็ดมาก" value="${(o.name||'').replace(/"/g,'&quot;')}">
+              <input id="oo-price-${o._key}" type="number" class="f-input" style="width:64px;margin:0;" placeholder="0" value="${o.price||0}">
+              <label style="display:flex;flex-direction:column;align-items:center;font-size:9.5px;color:var(--text-muted);white-space:nowrap;">หมด<input id="oo-avail-${o._key}" type="checkbox" ${o.available===false?'checked':''}></label>
+              <button type="button" class="btn-mini reject" style="flex:0 0 auto;padding:8px;margin:0;" onclick="removeOption('${g._key}','${o._key}')">✕</button>
+            </div>`).join('')}
+        </div>
+        <button type="button" class="btn-outline-mini" style="margin-top:8px;" onclick="addOption('${g._key}')">+ เพิ่มตัวเลือกในกลุ่มนี้</button>
+      </div>`).join('')}
+  `;
+}
+function addItemSheetHtml(){
+  const item = editingItemId ? state.menu.find(m => m.id === editingItemId) : null;
+  return `
+  <div class="sheet">
+    <div class="sheet-title"><h2>${editingItemId ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่'}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
     <div class="f-label">รูปเมนู (ถ้ามี)</div>
     <input id="mi-image" type="file" accept="image/*" class="f-input" onchange="previewImage(this)">
-    <img id="mi-preview" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;">
-    <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด">
+    <img id="mi-preview" style="${item && item.image_url ? 'display:block;' : 'display:none;'}width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;" src="${item && item.image_url ? item.image_url : ''}">
+    <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด" value="${item ? item.name.replace(/"/g,'&quot;') : ''}">
     <div class="f-label">หมวดหมู่ในเมนู</div>
-    <select id="mi-group" class="f-input">${MENU_GROUP_OPTIONS.map(g => `<option value="${g}">${g}</option>`).join('')}</select>
-    <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65">
-    <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜">
-    <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ">
-    <button class="btn-primary" onclick="addMenuItem()">บันทึกเมนู</button>
+    <select id="mi-group" class="f-input">${MENU_GROUP_OPTIONS.map(g => `<option value="${g}" ${item && item.group_name===g ? 'selected':''}>${g}</option>`).join('')}</select>
+    <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65" value="${item ? item.price : ''}">
+    <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜" value="${item ? (item.emoji||'') : ''}">
+    <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ" value="${item ? (item.description||'').replace(/"/g,'&quot;') : ''}">
+    ${optionGroupEditorHtml()}
+    <button class="btn-primary" onclick="saveMenuItem()">${editingItemId ? 'บันทึกการแก้ไข' : 'บันทึกเมนู'}</button>
   </div>`;
 }
 
@@ -857,15 +1118,7 @@ function render(){
     ${state.tab === 'menu' ? `<button class="fab-add" onclick="openAddItemSheet()">+ เพิ่มเมนูใหม่</button>` : ''}
   `;
 
-  let overlayEl = document.getElementById('overlay-root');
-  if (overlayEl) overlayEl.remove();
-  if (activeSheet === 'add-item') {
-    const div = document.createElement('div');
-    div.id = 'overlay-root'; div.className = 'overlay';
-    div.onclick = (e) => { if (e.target === div) closeSheet(); };
-    div.innerHTML = addItemSheetHtml();
-    document.body.appendChild(div);
-  }
+  refreshOverlay();
 }
 
 init();

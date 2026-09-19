@@ -159,13 +159,13 @@
 
   /* ---------- Promo banner carousel ---------- */
   .hero-carousel { margin: 4px 18px 18px; border-radius: var(--radius-l); overflow: hidden; position: relative; box-shadow: var(--shadow); background: var(--text); }
-  .hero-carousel-track { position: relative; width: 100%; height: 168px; }
+  .hero-carousel-track { position: relative; width: 100%; height: clamp(120px, 38vw, 168px); }
   .hero-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease-in-out; cursor: pointer; border: none; padding: 0; width: 100%; height: 100%; text-align: left; }
   .hero-slide.on { opacity: 1; z-index: 1; }
   .hero-slide img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .hero-slide .hero-slide-scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.65), rgba(0,0,0,.15) 60%, transparent); display: flex; align-items: center; }
-  .hero-slide .hero-slide-text { padding: 20px; max-width: 75%; color: #fff; }
-  .hero-slide .hero-slide-text h2 { font-size: 19px; line-height: 1.25; }
+  .hero-slide .hero-slide-text { padding: clamp(12px, 5vw, 20px); max-width: 78%; color: #fff; }
+  .hero-slide .hero-slide-text h2 { font-size: clamp(14px, 4.3vw, 19px); line-height: 1.25; }
   .hero-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.4); color: #fff; border: none; display: flex; align-items: center; justify-content: center; font-size: 13px; }
   .hero-arrow.prev { left: 10px; } .hero-arrow.next { right: 10px; }
   .hero-dots { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; gap: 6px; }
@@ -516,7 +516,7 @@ const state = {
   activeCat: 'all',
   searchQuery: '',
   currentRestaurantId: null,
-  cart: { restaurantId: null, items: {} },
+  cart: { restaurantId: null, lines: [] },
   orders: [],
   activeOrder: null,
   loading: true,
@@ -533,7 +533,14 @@ let checkoutGpsCoords = null; // {lat,lng} เมื่อกดปุ่ม GPS
 function resetCheckoutExtras(){ checkoutDiscount = { code: null, amount: 0 }; checkoutGpsCoords = null; }
 
 function loadState() {
-  try { const c = localStorage.getItem('imduan_cart'); if (c) state.cart = JSON.parse(c); } catch(e) {}
+  try {
+    const c = localStorage.getItem('imduan_cart');
+    if (c) {
+      const parsed = JSON.parse(c);
+      // รูปแบบตะกร้าเก่า (ก่อนมีตัวเลือกเมนู) ใช้ items เป็น map id->qty — เข้ากันไม่ได้กับ lines ใหม่ ล้างทิ้งแล้วเริ่มใหม่
+      if (parsed && Array.isArray(parsed.lines)) state.cart = parsed;
+    }
+  } catch(e) {}
   try { const o = localStorage.getItem('imduan_orders'); if (o) state.orders = JSON.parse(o); } catch(e) {}
 }
 function saveCart() { try { localStorage.setItem('imduan_cart', JSON.stringify(state.cart)); } catch(e) {} }
@@ -545,7 +552,16 @@ function mapRestaurantRow(r) {
   (r.menu_items || []).filter(m => m.is_available !== false).forEach(m => {
     const g = m.group_name || 'เมนู';
     if (!groups[g]) groups[g] = [];
-    groups[g].push({ id: m.id, name: m.name, desc: m.description || '', price: Number(m.price), emoji: m.emoji || '🍽️', image: m.image_url || null });
+    const optionGroups = (m.menu_item_option_groups || [])
+      .slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+      .map(og => ({
+        id: og.id, name: og.name, selectType: og.select_type, required: !!og.required, maxSelect: og.max_select || 1,
+        options: (og.menu_item_options || []).slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(o => ({
+          id: o.id, emoji: o.emoji || '', name: o.name, priceDelta: Number(o.price_delta)||0, available: o.is_available !== false,
+        })),
+      }))
+      .filter(og => og.options.length > 0);
+    groups[g].push({ id: m.id, name: m.name, desc: m.description || '', price: Number(m.price), emoji: m.emoji || '🍽️', image: m.image_url || null, optionGroups });
   });
   return {
     id: r.id, name: r.name, cat: r.category || 'other', emoji: r.emoji || '🍽️', color: r.color || '#FDEDE3',
@@ -612,19 +628,27 @@ async function doLogout() {
   location.reload();
 }
 
+async function fetchRestaurantsRaw(withOptions){
+  const base = 'id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,storefront_url,';
+  const itemsField = withOptions
+    ? 'menu_items(id,group_name,name,description,price,emoji,is_available,image_url,menu_item_option_groups(id,name,select_type,required,max_select,sort_order,menu_item_options(id,emoji,name,price_delta,is_available,sort_order)))'
+    : 'menu_items(id,group_name,name,description,price,emoji,is_available,image_url)';
+  return supabaseClient.from('restaurants').select(base + itemsField)
+    .eq('status', 'active').eq('is_open', true)
+    .order('is_featured', { ascending: false }).order('name', { ascending: true });
+}
 async function init() {
   loadState();
   render(); // แสดงหน้า loading ก่อน
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient
-        .from('restaurants')
-        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,storefront_url,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
-        .eq('status', 'active')
-        .eq('is_open', true)
-        .order('is_featured', { ascending: false })
-        .order('name', { ascending: true });
-      if (error) throw error;
+      let { data, error } = await fetchRestaurantsRaw(true);
+      if (error) {
+        // ตารางตัวเลือกเมนู (menu_item_option_groups) อาจยังไม่ได้สร้างใน Supabase — ลองอีกครั้งแบบไม่มีตัวเลือก
+        console.warn('Load with option groups failed, retrying without them:', error);
+        ({ data, error } = await fetchRestaurantsRaw(false));
+        if (error) throw error;
+      }
       RESTAURANTS = (data || []).map(mapRestaurantRow);
       dataSource = 'supabase';
     } catch (err) {
@@ -649,7 +673,7 @@ async function init() {
     dataSource = 'mock';
   }
   if (state.cart.restaurantId && !findRestaurant(state.cart.restaurantId)) {
-    state.cart = { restaurantId: null, items: {} };
+    state.cart = { restaurantId: null, lines: [] };
     saveCart();
   }
   state.loading = false;
@@ -666,18 +690,15 @@ function findItem(restaurant, itemId) {
   }
   return null;
 }
-function cartCount() { return Object.values(state.cart.items).reduce((a,b) => a+b, 0); }
+function cartCount() { return state.cart.lines.reduce((a,l) => a+l.qty, 0); }
 function cartSubtotal() {
-  const r = findRestaurant(state.cart.restaurantId);
-  if (!r) return 0;
-  let sum = 0;
-  for (const [id, qty] of Object.entries(state.cart.items)) {
-    const item = findItem(r, id);
-    if (item) sum += item.price * qty;
-  }
-  return sum;
+  return state.cart.lines.reduce((sum,l) => sum + l.unitPrice * l.qty, 0);
 }
 function money(n) { return Number(n||0).toLocaleString('th-TH') + ' บาท'; }
+function orderItemLineText(i){
+  const opts = (i.selected_options||[]).map(s => s.optionName || s.option_name).filter(Boolean).join(', ');
+  return `${i.qty}× ${i.name}${opts ? ` (${opts})` : ''}`;
+}
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -915,24 +936,122 @@ async function goToOrders() {
 }
 function openRestaurant(id) { state.currentRestaurantId = id; setView('detail'); }
 
+function itemHasOptions(item){ return item && item.optionGroups && item.optionGroups.length > 0; }
+function lineForSimpleItem(itemId){
+  return state.cart.lines.find(l => l.itemId === itemId && (!l.selections || l.selections.length === 0));
+}
+function qtyForSimpleItem(itemId){
+  const line = lineForSimpleItem(itemId);
+  return line ? line.qty : 0;
+}
+function totalQtyForItem(itemId){
+  return state.cart.lines.filter(l => l.itemId === itemId).reduce((a,l)=>a+l.qty,0);
+}
+function addLineToCart(restaurantId, itemId, selections, unitPrice, qty){
+  if (!state.cart.restaurantId) state.cart.restaurantId = restaurantId;
+  state.cart.lines.push({
+    lineId: 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,8),
+    itemId, qty: qty || 1, selections: selections || [], unitPrice,
+  });
+  saveCart();
+}
 function addToCart(restaurantId, itemId) {
   if (state.cart.restaurantId && state.cart.restaurantId !== restaurantId && cartCount() > 0) {
     const ok = confirm('ตะกร้าของคุณมีสินค้าจากร้านอื่นอยู่ เริ่มตะกร้าใหม่สำหรับร้านนี้หรือไม่?');
     if (!ok) return;
-    state.cart = { restaurantId, items: {} };
+    state.cart = { restaurantId, lines: [] };
   }
+  const r = findRestaurant(restaurantId);
+  const item = r ? findItem(r, itemId) : null;
+  if (item && itemHasOptions(item)) { openItemOptionsSheet(restaurantId, itemId); return; }
   if (!state.cart.restaurantId) state.cart.restaurantId = restaurantId;
-  state.cart.items[itemId] = (state.cart.items[itemId] || 0) + 1;
+  const existing = lineForSimpleItem(itemId);
+  if (existing) { existing.qty += 1; }
+  else { addLineToCart(restaurantId, itemId, [], item ? item.price : 0, 1); return; }
   saveCart(); render();
 }
 function removeFromCart(itemId) {
-  if (!state.cart.items[itemId]) return;
-  state.cart.items[itemId] -= 1;
-  if (state.cart.items[itemId] <= 0) delete state.cart.items[itemId];
-  if (Object.keys(state.cart.items).length === 0) state.cart.restaurantId = null;
+  const existing = lineForSimpleItem(itemId);
+  if (!existing) return;
+  existing.qty -= 1;
+  if (existing.qty <= 0) state.cart.lines = state.cart.lines.filter(l => l.lineId !== existing.lineId);
+  if (state.cart.lines.length === 0) state.cart.restaurantId = null;
   saveCart(); render();
 }
-function clearCart() { state.cart = { restaurantId: null, items: {} }; saveCart(); }
+function changeLineQty(lineId, delta){
+  const line = state.cart.lines.find(l => l.lineId === lineId);
+  if (!line) return;
+  line.qty += delta;
+  if (line.qty <= 0) state.cart.lines = state.cart.lines.filter(l => l.lineId !== lineId);
+  if (state.cart.lines.length === 0) state.cart.restaurantId = null;
+  saveCart(); render();
+}
+function clearCart() { state.cart = { restaurantId: null, lines: [] }; saveCart(); }
+
+/* ============ ตัวเลือกเมนู (item options sheet) ============ */
+let optionSheetTarget = null;    // { restaurantId, itemId }
+let optionSheetSelections = {};  // { [groupId]: [optionId, ...] }
+let optionSheetQty = 1;
+function openItemOptionsSheet(restaurantId, itemId){
+  optionSheetTarget = { restaurantId, itemId };
+  optionSheetSelections = {};
+  optionSheetQty = 1;
+  openSheet('item-options');
+}
+function computeOptionSheetItem(){
+  if (!optionSheetTarget) return null;
+  const r = findRestaurant(optionSheetTarget.restaurantId);
+  if (!r) return null;
+  return findItem(r, optionSheetTarget.itemId);
+}
+function selectSingleOption(groupId, optionId){
+  optionSheetSelections[groupId] = [optionId];
+  render();
+}
+function toggleMultiOption(groupId, optionId, maxSelect){
+  const cur = optionSheetSelections[groupId] || [];
+  if (cur.includes(optionId)) {
+    optionSheetSelections[groupId] = cur.filter(x => x !== optionId);
+  } else {
+    if (cur.length >= maxSelect) { showToast(`เลือกได้สูงสุด ${maxSelect} ข้อ`); return; }
+    optionSheetSelections[groupId] = [...cur, optionId];
+  }
+  render();
+}
+function changeOptionSheetQty(delta){
+  optionSheetQty = Math.max(1, optionSheetQty + delta);
+  render();
+}
+function optionSheetUnitPrice(){
+  const item = computeOptionSheetItem();
+  if (!item) return 0;
+  let price = item.price;
+  (item.optionGroups||[]).forEach(g => {
+    const picked = optionSheetSelections[g.id] || [];
+    g.options.forEach(o => { if (picked.includes(o.id)) price += o.priceDelta; });
+  });
+  return price;
+}
+function optionSheetMissingRequired(){
+  const item = computeOptionSheetItem();
+  if (!item) return [];
+  return (item.optionGroups||[]).filter(g => g.required && (optionSheetSelections[g.id]||[]).length === 0);
+}
+function confirmAddFromOptionSheet(){
+  const item = computeOptionSheetItem();
+  if (!item || !optionSheetTarget) return;
+  const missing = optionSheetMissingRequired();
+  if (missing.length > 0) { showToast(`กรุณาเลือก "${missing[0].name}" ก่อนใส่ตะกร้า`); return; }
+  const selections = [];
+  (item.optionGroups||[]).forEach(g => {
+    const picked = optionSheetSelections[g.id] || [];
+    g.options.forEach(o => { if (picked.includes(o.id)) selections.push({ groupId:g.id, groupName:g.name, optionId:o.id, optionName:o.name, priceDelta:o.priceDelta }); });
+  });
+  addLineToCart(optionSheetTarget.restaurantId, optionSheetTarget.itemId, selections, optionSheetUnitPrice(), optionSheetQty);
+  showToast('เพิ่มลงตะกร้าแล้ว 🛒');
+  optionSheetTarget = null; optionSheetSelections = {}; optionSheetQty = 1;
+  closeSheet();
+}
 
 function openCartSheet() { openSheet('cart'); }
 function openCheckoutSheet() { openSheet('checkout'); }
@@ -940,7 +1059,7 @@ function openProfileSheet() { openSheet('profile'); }
 let activeSheet = null;
 let checkoutPayment = 'cash';
 function openSheet(name) { activeSheet = name; render(); }
-function closeSheet() { activeSheet = null; render(); }
+function closeSheet() { activeSheet = null; optionSheetTarget = null; optionSheetSelections = {}; render(); }
 
 const STATUS_MAP = {
   pending:        { label: 'รอไรเดอร์รับงาน',                emoji: '🔍', pct: 15, stage: 0 },
@@ -969,9 +1088,9 @@ async function placeOrder() {
   if (!addr) { showToast('กรุณากรอกที่อยู่จัดส่ง'); return; }
   const r = findRestaurant(state.cart.restaurantId);
   if (!r) { showToast('ไม่พบร้านค้า'); return; }
-  const cartLines = Object.entries(state.cart.items).map(([id, qty]) => {
-    const item = findItem(r, id);
-    return { menu_item_id: id, name: item.name, qty, price: item.price, emoji: item.emoji };
+  const cartLines = state.cart.lines.map(line => {
+    const item = findItem(r, line.itemId);
+    return { menu_item_id: line.itemId, name: item.name, qty: line.qty, price: line.unitPrice, emoji: item.emoji, selected_options: line.selections||[] };
   });
   const subtotal = cartSubtotal();
   const isSelfDelivery = !!r.selfDelivery;
@@ -1003,6 +1122,7 @@ async function placeOrder() {
       if (orderErr) throw orderErr;
       const itemsPayload = cartLines.map(i => ({
         order_id: orderRow.id, menu_item_id: i.menu_item_id, name: i.name, emoji: i.emoji, qty: i.qty, price: i.price,
+        selected_options: i.selected_options && i.selected_options.length ? i.selected_options : null,
       }));
       const { error: itemsErr } = await supabaseClient.from('order_items').insert(itemsPayload);
       if (itemsErr) throw itemsErr;
@@ -1124,7 +1244,7 @@ async function refreshMyOrders() {
   try {
     const { data, error } = await supabaseClient
       .from('orders')
-      .select('id,order_code,status,subtotal,delivery_fee,total,address,payment_method,created_at,rider_id,is_self_delivery,dropoff_lat,dropoff_lng,discount_code,discount_amount,restaurants(name,emoji),order_items(name,emoji,qty,price)')
+      .select('id,order_code,status,subtotal,delivery_fee,total,address,payment_method,created_at,rider_id,is_self_delivery,dropoff_lat,dropoff_lng,discount_code,discount_amount,cancel_reason,restaurants(name,emoji),order_items(name,emoji,qty,price,selected_options)')
       .eq('customer_id', state.customerId)
       .order('created_at', { ascending: false })
       .limit(30);
@@ -1137,7 +1257,7 @@ async function refreshMyOrders() {
       address: o.address, payment: o.payment_method, date: new Date(o.created_at).toLocaleString('th-TH'),
       riderId: o.rider_id, riderInfo: null, isSelfDelivery: o.is_self_delivery,
       dropoffLat: o.dropoff_lat, dropoffLng: o.dropoff_lng,
-      discountCode: o.discount_code, discountAmount: o.discount_amount,
+      discountCode: o.discount_code, discountAmount: o.discount_amount, cancelReason: o.cancel_reason,
     }));
   } catch (err) { console.warn('refresh orders failed', err); }
 }
@@ -1164,7 +1284,7 @@ function topbar() {
     : `<div class="logo-mark">อ</div>`;
   return `
   <div class="topbar">
-    <div class="logo">${logoHtml}<div class="logo-text"></div></div>
+    <div class="logo">${logoHtml}<div class="logo-text">อิ่มด่วน</div></div>
     <div class="addr-pill">📍 ส่งไปที่ บ้าน • สุขุมวิท</div>
     <button class="icon-btn" onclick="goToOrders()">🧾</button>
     <button class="icon-btn" onclick="openCartSheet()">🛒${cartCount()>0?`<span class="cart-badge">${cartCount()}</span>`:''}</button>
@@ -1279,17 +1399,18 @@ function renderDetail() {
   const menuHtml = r.menu.map(group => `
     <div class="menu-group-title">${group.group}</div>
     ${group.items.map(item => {
-      const qty = inCartHere ? (state.cart.items[item.id] || 0) : 0;
+      const hasOpts = itemHasOptions(item);
+      const qty = inCartHere ? (hasOpts ? totalQtyForItem(item.id) : qtyForSimpleItem(item.id)) : 0;
       return `
       <div class="menu-item">
         <div class="menu-item-emoji" style="${item.image ? `background-image:url('${item.image}');background-size:cover;background-position:center;` : `background:${r.color}`}">${item.image ? '' : item.emoji}</div>
         <div class="menu-item-info">
           <div class="menu-item-name">${item.name}</div>
-          <div class="menu-item-desc">${item.desc}</div>
+          <div class="menu-item-desc">${item.desc}${hasOpts ? ' · มีตัวเลือกให้เลือก' : ''}</div>
           <div class="menu-item-price">${money(item.price)}</div>
         </div>
         <div class="qty-ctrl">
-          ${qty > 0 ? `<button class="qty-btn" onclick="removeFromCart('${item.id}')">−</button><div class="qty-num">${qty}</div>` : ''}
+          ${qty > 0 ? `${hasOpts ? '' : `<button class="qty-btn" onclick="removeFromCart('${item.id}')">−</button>`}<div class="qty-num">${qty}</div>` : ''}
           <button class="qty-btn add" onclick="addToCart('${r.id}','${item.id}')">+</button>
         </div>
       </div>`;
@@ -1322,16 +1443,22 @@ function cartSheetHtml() {
       <button class="btn-primary" onclick="closeSheet()">เลือกเมนูต่อ</button>
     </div>`;
   }
-  const lines = Object.entries(state.cart.items).map(([id, qty]) => {
-    const item = findItem(r, id);
+  const lines = state.cart.lines.map(line => {
+    const item = findItem(r, line.itemId);
+    if (!item) return '';
+    const optsText = (line.selections||[]).map(s => s.optionName).join(', ');
     return `
     <div class="cart-line">
       <div class="cart-line-emoji" style="${item.image ? `background-image:url('${item.image}');background-size:cover;background-position:center;` : `background:${r.color}`}">${item.image ? '' : item.emoji}</div>
-      <div class="cart-line-info"><div class="cart-line-name">${item.name}</div><div class="cart-line-price">${money(item.price)}</div></div>
+      <div class="cart-line-info">
+        <div class="cart-line-name">${item.name}</div>
+        ${optsText ? `<div class="cart-line-price" style="color:var(--text-muted);">${optsText}</div>` : ''}
+        <div class="cart-line-price">${money(line.unitPrice)}</div>
+      </div>
       <div class="qty-ctrl">
-        <button class="qty-btn" onclick="removeFromCart('${id}')">−</button>
-        <div class="qty-num">${qty}</div>
-        <button class="qty-btn add" onclick="addToCart('${r.id}','${id}')">+</button>
+        <button class="qty-btn" onclick="changeLineQty('${line.lineId}', -1)">−</button>
+        <div class="qty-num">${line.qty}</div>
+        <button class="qty-btn add" onclick="changeLineQty('${line.lineId}', 1)">+</button>
       </div>
     </div>`;
   }).join('');
@@ -1347,6 +1474,54 @@ function cartSheetHtml() {
     <div class="summary-row total"><span>ยอดรวม</span><span>${money(subtotal + deliveryFee)}</span></div>
     <button class="btn-primary" onclick="openCheckoutSheet()">ดำเนินการสั่งซื้อ</button>
     <button class="btn-secondary" onclick="closeSheet()">เลือกเมนูเพิ่ม</button>
+  </div>`;
+}
+function itemOptionsSheetHtml(){
+  const item = computeOptionSheetItem();
+  const r = optionSheetTarget ? findRestaurant(optionSheetTarget.restaurantId) : null;
+  if (!item || !r) return `<div class="sheet"><div class="empty-state"><div class="e">🍽️</div><h3>ไม่พบเมนู</h3></div></div>`;
+  const missing = optionSheetMissingRequired();
+  const total = optionSheetUnitPrice() * optionSheetQty;
+  const groupsHtml = (item.optionGroups||[]).map(g => {
+    const picked = optionSheetSelections[g.id] || [];
+    const subtitle = g.selectType === 'single' ? 'กรุณาเลือก 1 ข้อ' : `เลือกได้สูงสุด ${g.maxSelect} ข้อ`;
+    const optionsHtml = g.options.map(o => {
+      const isPicked = picked.includes(o.id);
+      const disabled = o.available === false;
+      const onClick = disabled ? '' : (g.selectType === 'single'
+        ? `onclick="selectSingleOption('${g.id}','${o.id}')"`
+        : `onclick="toggleMultiOption('${g.id}','${o.id}', ${g.maxSelect})"`);
+      return `
+      <div class="pay-option ${isPicked?'selected':''}" style="${disabled ? 'opacity:.45;' : ''}" ${onClick}>
+        <div class="dot" style="${g.selectType==='multi' ? 'border-radius:5px;' : ''}"></div>
+        <span style="flex:1;">${o.emoji ? o.emoji+' ' : ''}${o.name}</span>
+        <span style="font-weight:700;color:${disabled ? 'var(--text-muted)' : 'inherit'};">${disabled ? 'หมด' : (o.priceDelta>0 ? '+'+money(o.priceDelta) : money(0))}</span>
+      </div>`;
+    }).join('');
+    return `
+    <div style="margin-top:12px;">
+      <div style="display:flex;align-items:center;gap:8px;padding:0 20px;">
+        <b style="font-size:14px;">${g.name}</b>
+        ${g.required ? `<span style="font-size:10px;font-weight:800;background:var(--surface-2);color:var(--text-muted);border-radius:999px;padding:2px 8px;">ต้องระบุ</span>` : ''}
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted);padding:2px 20px 6px;">${subtitle}</div>
+      ${optionsHtml}
+    </div>`;
+  }).join('');
+  return `
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title"><h2>${item.name}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    ${item.desc ? `<div style="padding:0 20px 4px;font-size:12.5px;color:var(--text-muted);">${item.desc}</div>` : ''}
+    ${groupsHtml}
+    <div style="display:flex;align-items:center;gap:14px;padding:16px 20px 4px;">
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeOptionSheetQty(-1)">−</button>
+        <div class="qty-num">${optionSheetQty}</div>
+        <button class="qty-btn add" onclick="changeOptionSheetQty(1)">+</button>
+      </div>
+    </div>
+    <button class="btn-primary" ${missing.length ? 'disabled' : ''} onclick="confirmAddFromOptionSheet()">ใส่ตะกร้า · ${money(total)}</button>
   </div>`;
 }
 function checkoutSheetHtml() {
@@ -1506,7 +1681,7 @@ function renderTracking() {
     <div class="track-card">
       <div class="track-emoji">${info.emoji}</div>
       <div class="track-status">${info.label}</div>
-      <div class="track-sub">${o.status==='cancelled' ? 'ติดต่อร้านค้าหรือฝ่ายบริการลูกค้า' : (o.status==='delivered' ? 'ขอบคุณที่ใช้บริการอิ่มด่วน 🎉' : (o.demo ? 'โหมดตัวอย่าง (ยังไม่เชื่อมฐานข้อมูล)' : 'ระบบจะอัปเดตสถานะให้อัตโนมัติ'))}</div>
+      <div class="track-sub">${o.status==='cancelled' ? (o.cancelReason ? `เหตุผล: ${o.cancelReason}` : 'ติดต่อร้านค้าหรือฝ่ายบริการลูกค้า') : (o.status==='delivered' ? 'ขอบคุณที่ใช้บริการอิ่มด่วน 🎉' : (o.demo ? 'โหมดตัวอย่าง (ยังไม่เชื่อมฐานข้อมูล)' : 'ระบบจะอัปเดตสถานะให้อัตโนมัติ'))}</div>
       <div class="progress-bar"><div class="progress-fill" style="width:${info.pct}%"></div></div>
 
       <div class="stage-row">
@@ -1539,7 +1714,7 @@ function renderTracking() {
     <div class="section-title" style="padding:0;margin-top:16px;"><h2>สรุปคำสั่งซื้อ</h2></div>
     <div class="order-card" style="margin-top:8px">
       <div class="order-card-top"><span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span></div>
-      <div class="order-card-items">${o.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+      <div class="order-card-items">${o.items.map(orderItemLineText).join(', ')}</div>
       <div class="order-card-bottom"><span>ส่งไปที่ ${o.address}</span></div>
       ${o.discountAmount>0 ? `<div class="order-card-bottom"><span style="color:var(--primary)">ส่วนลด (${o.discountCode})</span><span style="color:var(--primary)">-${money(o.discountAmount)}</span></div>` : ''}
       <div class="order-card-bottom"><b>รวม ${money(o.total)}</b></div>
@@ -1581,7 +1756,7 @@ function renderOrders() {
           <span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span>
           <span class="order-status-tag ${done?'':'pending'}">${info.label}</span>
         </div>
-        <div class="order-card-items">${o.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+        <div class="order-card-items">${o.items.map(orderItemLineText).join(', ')}</div>
         <div class="order-card-bottom"><span style="color:var(--text-muted)">${o.date}</span><b>${money(o.total)}</b></div>
       </div>`;
     }).join('')}
@@ -1621,7 +1796,7 @@ function render() {
     const div = document.createElement('div');
     div.id = 'overlay-root'; div.className = 'overlay';
     div.onclick = (e) => { if (e.target === div) closeSheet(); };
-    div.innerHTML = activeSheet === 'cart' ? cartSheetHtml() : (activeSheet === 'profile' ? profileSheetHtml() : checkoutSheetHtml());
+    div.innerHTML = activeSheet === 'cart' ? cartSheetHtml() : (activeSheet === 'profile' ? profileSheetHtml() : (activeSheet === 'item-options' ? itemOptionsSheetHtml() : checkoutSheetHtml()));
     document.body.appendChild(div);
   }
 
