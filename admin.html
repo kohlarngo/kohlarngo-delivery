@@ -535,15 +535,36 @@ async function toggleFeatured(id, current){
 }
 /* ลบออเดอร์ (พร้อมข้อมูลผูกอยู่) ทั้งหมดที่ตรงกับ field=value เช่น restaurant_id, rider_id, customer_id
    ใช้ตอน "บังคับลบ" เอนทิตีที่ติด foreign key จากประวัติออเดอร์ */
+async function deleteAndVerify(table, field, value, label){
+  const { error } = await supabaseClient.from(table).delete().eq(field, value);
+  if (error) throw error;
+  const { count, error: chkErr } = await supabaseClient.from(table).select('*', { count:'exact', head:true }).eq(field, value);
+  if (chkErr) throw chkErr;
+  if (count && count > 0) {
+    throw new Error(`ลบ${label||table}ไม่สำเร็จ ${count} รายการ (คำสั่งลบไม่ error แต่ไม่มีอะไรถูกลบจริง — มักเกิดจาก Row Level Security ของตาราง ${table} ยังไม่อนุญาตให้แอดมินลบ ดู RLS policy สำหรับแอดมินในไฟล์ migration)`);
+  }
+}
+async function deleteRowAndVerify(table, id, label){
+  await deleteAndVerify(table, 'id', id, label);
+}
 async function cascadeDeleteOrdersByField(field, value){
   const { data: ords, error: ordErr } = await supabaseClient.from('orders').select('id').eq(field, value);
   if (ordErr) throw ordErr;
   const ids = (ords||[]).map(o => o.id);
   if (!ids.length) return;
-  await supabaseClient.from('order_items').delete().in('order_id', ids);
-  await supabaseClient.from('order_messages').delete().in('order_id', ids);
-  const { error } = await supabaseClient.from('orders').delete().in('id', ids);
-  if (error) throw error;
+  const { error: itemsErr } = await supabaseClient.from('order_items').delete().in('order_id', ids);
+  if (itemsErr) throw itemsErr;
+  const { error: msgErr } = await supabaseClient.from('order_messages').delete().in('order_id', ids);
+  if (msgErr) throw msgErr;
+  const { error: delErr } = await supabaseClient.from('orders').delete().in('id', ids);
+  if (delErr) throw delErr;
+  // ยืนยันว่าลบจริง — ถ้า Row Level Security บล็อกการลบเงียบๆ (ไม่ error แต่ก็ไม่ลบ) ให้ตรวจจับตรงนี้แทน
+  // ไม่งั้นโค้ดจะไปเจอ error ตอนลบตัวหลัก (ร้าน/ไรเดอร์/ลูกค้า) ซึ่งอ่านสาเหตุจริงได้ยากกว่า
+  const { count, error: chkErr } = await supabaseClient.from('orders').select('*', { count:'exact', head:true }).eq(field, value);
+  if (chkErr) throw chkErr;
+  if (count && count > 0) {
+    throw new Error(`ลบออเดอร์ไม่สำเร็จ ${count} รายการ (คำสั่งลบไม่ error แต่ก็ไม่มีอะไรถูกลบจริง — มักเกิดจาก Row Level Security ของตาราง orders ยังไม่อนุญาตให้แอดมินลบ ดู RLS policy สำหรับแอดมินในไฟล์ migration)`);
+  }
 }
 function isForeignKeyError(err){
   return String(err.message||'').toLowerCase().includes('foreign key') || String(err.code)==='23503';
@@ -552,18 +573,16 @@ async function deleteRestPermanently(id, name){
   if (!confirm(`ลบร้าน "${name}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
   if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
   try {
-    const { error } = await supabaseClient.from('restaurants').delete().eq('id', id);
-    if (error) throw error;
+    await deleteRowAndVerify('restaurants', id, 'ร้าน');
     showToast('ลบร้านแล้ว'); await refreshRestaurants(); render();
   } catch(err) {
     console.error(err);
     if (!isForeignKeyError(err)) { showToast('ลบไม่สำเร็จ: ' + (err.message||'')); return; }
     if (!confirm(`ลบไม่ได้ตามปกติ เพราะร้าน "${name}" มีเมนู/ประวัติออเดอร์ผูกอยู่\n\nกด "ตกลง" เพื่อ "บังคับลบ" — ระบบจะลบเมนูและประวัติออเดอร์ทั้งหมดของร้านนี้ทิ้งไปด้วย การกระทำนี้ย้อนกลับไม่ได้`)) return;
     try {
-      await supabaseClient.from('menu_items').delete().eq('restaurant_id', id);
+      await deleteAndVerify('menu_items', 'restaurant_id', id, 'เมนู');
       await cascadeDeleteOrdersByField('restaurant_id', id);
-      const { error: delErr } = await supabaseClient.from('restaurants').delete().eq('id', id);
-      if (delErr) throw delErr;
+      await deleteRowAndVerify('restaurants', id, 'ร้าน');
       showToast('บังคับลบร้านและข้อมูลที่เกี่ยวข้องแล้ว'); await refreshRestaurants(); render();
     } catch(err2) {
       console.error(err2);
@@ -619,14 +638,20 @@ async function toggleMenuItemGlobal(id, current){
 async function deleteMenuItemGlobal(id, name){
   if (!confirm(`ลบเมนู "${name}" ทิ้งถาวร?`)) return;
   if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
-  try { const { error } = await supabaseClient.from('menu_items').delete().eq('id', id); if (error) throw error;
+  try { const { error: unlinkErr } = await supabaseClient.from('order_items').update({ menu_item_id: null }).eq('menu_item_id', id);
+    void unlinkErr; // เมนูที่ยังไม่เคยมีคนสั่งจะไม่มีแถวให้แก้ไข ไม่ต้องสนใจ error ตรงนี้
+    await deleteRowAndVerify('menu_items', id, 'เมนู');
     showToast('ลบเมนูแล้ว'); await refreshAllMenuItems(); render();
   } catch(err){
     console.error(err);
     if (!isForeignKeyError(err)) { showToast('ลบไม่สำเร็จ: ' + (err.message||'')); return; }
     if (!confirm(`ลบไม่ได้ตามปกติ เพราะเมนู "${name}" ถูกใช้ในประวัติออเดอร์เก่า\n\nกด "ตกลง" เพื่อ "บังคับลบ" เมนูนี้ (ประวัติออเดอร์เก่ายังอยู่ครบ แค่จะไม่ผูกกับเมนูนี้อีกต่อไป) — ย้อนกลับไม่ได้`)) return;
     try {
-      await supabaseClient.from('order_items').update({ menu_item_id: null }).eq('menu_item_id', id);
+      const { error: unlinkErr } = await supabaseClient.from('order_items').update({ menu_item_id: null }).eq('menu_item_id', id);
+      if (unlinkErr) throw unlinkErr;
+      const { count, error: chkErr } = await supabaseClient.from('order_items').select('*', { count:'exact', head:true }).eq('menu_item_id', id);
+      if (chkErr) throw chkErr;
+      if (count && count > 0) throw new Error(`ยกเลิกการผูกเมนูกับออเดอร์เก่าไม่สำเร็จ ${count} รายการ (มักเกิดจาก Row Level Security ของตาราง order_items ยังไม่อนุญาตให้แอดมินแก้ไข)`);
       const { error: delErr } = await supabaseClient.from('menu_items').delete().eq('id', id);
       if (delErr) throw delErr;
       showToast('บังคับลบเมนูแล้ว'); await refreshAllMenuItems(); render();
@@ -916,8 +941,7 @@ async function deleteRiderPermanently(id, name){
   if (!confirm(`ลบไรเดอร์ "${name}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
   if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
   try {
-    const { error } = await supabaseClient.from('riders').delete().eq('id', id);
-    if (error) throw error;
+    await deleteRowAndVerify('riders', id, 'ไรเดอร์');
     showToast('ลบไรเดอร์แล้ว'); await refreshRiders(); render();
   } catch(err) {
     console.error(err);
@@ -925,9 +949,8 @@ async function deleteRiderPermanently(id, name){
     if (!confirm(`ลบไม่ได้ตามปกติ เพราะไรเดอร์ "${name}" มีประวัติออเดอร์ผูกอยู่\n\nกด "ตกลง" เพื่อ "บังคับลบ" — ระบบจะลบประวัติออเดอร์ทั้งหมดที่ไรเดอร์คนนี้เคยรับทิ้งไปด้วย การกระทำนี้ย้อนกลับไม่ได้`)) return;
     try {
       await cascadeDeleteOrdersByField('rider_id', id);
-      await supabaseClient.from('gps_locations').delete().eq('rider_id', id);
-      const { error: delErr } = await supabaseClient.from('riders').delete().eq('id', id);
-      if (delErr) throw delErr;
+      await deleteAndVerify('gps_locations', 'rider_id', id, 'ตำแหน่ง GPS');
+      await deleteRowAndVerify('riders', id, 'ไรเดอร์');
       showToast('บังคับลบไรเดอร์และประวัติออเดอร์แล้ว'); await refreshRiders(); render();
     } catch(err2) {
       console.error(err2);
@@ -971,8 +994,7 @@ async function deleteUserPermanently(id, name){
   if (!confirm(`ลบบัญชีลูกค้า "${name}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
   if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
   try {
-    const { error } = await supabaseClient.from('customers').delete().eq('id', id);
-    if (error) throw error;
+    await deleteRowAndVerify('customers', id, 'บัญชีลูกค้า');
     showToast('ลบบัญชีลูกค้าแล้ว'); await refreshUsers(); render();
   } catch(err) {
     console.error(err);
@@ -980,8 +1002,7 @@ async function deleteUserPermanently(id, name){
     if (!confirm(`ลบไม่ได้ตามปกติ เพราะลูกค้า "${name}" มีประวัติออเดอร์ผูกอยู่\n\nกด "ตกลง" เพื่อ "บังคับลบ" — ระบบจะลบประวัติออเดอร์ทั้งหมดของลูกค้ารายนี้ทิ้งไปด้วย การกระทำนี้ย้อนกลับไม่ได้`)) return;
     try {
       await cascadeDeleteOrdersByField('customer_id', id);
-      const { error: delErr } = await supabaseClient.from('customers').delete().eq('id', id);
-      if (delErr) throw delErr;
+      await deleteRowAndVerify('customers', id, 'บัญชีลูกค้า');
       showToast('บังคับลบบัญชีลูกค้าและประวัติออเดอร์แล้ว'); await refreshUsers(); render();
     } catch(err2) {
       console.error(err2);
@@ -1022,10 +1043,9 @@ async function deleteOrderPermanently(rawId, code){
   if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
   try {
     // ลบข้อมูลที่ผูกกับออเดอร์นี้ก่อน กัน foreign key ชน
-    await supabaseClient.from('order_items').delete().eq('order_id', rawId);
-    await supabaseClient.from('order_messages').delete().eq('order_id', rawId);
-    const { error } = await supabaseClient.from('orders').delete().eq('id', rawId);
-    if (error) throw error;
+    await deleteAndVerify('order_items', 'order_id', rawId, 'รายการอาหารในออเดอร์');
+    await deleteAndVerify('order_messages', 'order_id', rawId, 'ข้อความแชทของออเดอร์');
+    await deleteRowAndVerify('orders', rawId, 'ออเดอร์');
     showToast('ลบออเดอร์แล้ว'); await refreshOrders(); render();
   } catch(err) {
     console.error(err);
