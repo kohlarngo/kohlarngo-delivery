@@ -417,9 +417,11 @@ function showBrowserNotification(title, body){
 
 function subscribeOrders(){
   if (!supabaseClient || ordersChannel) return;
+  console.log('[realtime] subscribing to merchant_orders_' + state.restaurantId, 'restaurantId =', state.restaurantId);
   ordersChannel = supabaseClient
     .channel('merchant_orders_' + state.restaurantId)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
+      console.log('[realtime] INSERT payload received:', payload);
       // ร้านทั่วไป (ไม่ได้ส่งเอง) ยังไม่ต้องแจ้งตอนนี้ เพราะรอไรเดอร์รับงานก่อนถึงจะเริ่มปรุง
       if (payload.new.is_self_delivery) {
         playAlertSound();
@@ -429,6 +431,7 @@ function subscribeOrders(){
       await refreshOrders(); render();
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
+      console.log('[realtime] UPDATE payload received:', payload);
       // ไรเดอร์เพิ่งรับงาน (pending -> preparing) คือสัญญาณให้ครัวเริ่มทำอาหาร แจ้งเตือนตอนนี้แทน
       if (payload.new.status === 'preparing' && payload.old && payload.old.status === 'pending' && !payload.new.is_self_delivery) {
         playAlertSound();
@@ -437,8 +440,18 @@ function subscribeOrders(){
       }
       await refreshOrders(); render();
     })
-    .subscribe();
+    .subscribe((status, err) => {
+      console.log('[realtime] subscription status:', status, err || '');
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn('[realtime] subscribe ไม่สำเร็จ:', status, err);
+      }
+    });
 }
+/* ============ AUTO-REFRESH สำรอง (เผื่อ realtime หลุด) ============ */
+/* ดึงออเดอร์ใหม่ทุก 8 วินาที เป็น fallback เสริมจาก realtime ไม่ได้ใช้แทน */
+setInterval(async () => {
+  if (state.view === 'dashboard' && state.restaurantId) { await refreshOrders(); render(); }
+}, 8000);
 
 /* ============ ORDER ACTIONS ============ */
 async function acceptOrder(id){
