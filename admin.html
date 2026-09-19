@@ -166,6 +166,7 @@ let riders = [];
 let users = [];
 let platformOrders = [];
 let commissionRate = 20;
+let appLogoUrl = null;
 let minDeliveryFee = 15;
 let todayOrdersCount = 0;
 
@@ -253,8 +254,17 @@ function deniedHtml(){
   </div>`;
 }
 async function refreshAll(){
-  await Promise.all([refreshRestaurants(), refreshRiders(), refreshUsers(), refreshOrders(), refreshSettings(), refreshTodayOrdersCount(), refreshPromos(), refreshAllMenuItems()]);
+  await Promise.all([refreshRestaurants(), refreshRiders(), refreshUsers(), refreshOrders(), refreshSettings(), refreshTodayOrdersCount(), refreshPromos(), refreshAllMenuItems(), refreshPromoCodes()]);
   await computeGmvWeekFromDb();
+}
+
+let promoCodes = [];
+async function refreshPromoCodes(){
+  try {
+    const { data, error } = await supabaseClient.from('promo_codes').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    promoCodes = data || [];
+  } catch (err) { console.warn('refreshPromoCodes failed', err); }
 }
 
 let promoBanners = [];
@@ -314,26 +324,31 @@ async function refreshOrders(){
   try {
     const { data, error } = await supabaseClient
       .from('orders')
-      .select('id,order_code,status,total,created_at,restaurants(name),customers(name)')
+      .select('id,order_code,status,total,created_at,is_self_delivery,restaurants(name),customers(name)')
       .order('created_at', { ascending: false }).limit(60);
     if (error) throw error;
     platformOrders = (data||[]).map(o => ({
       id:o.order_code, rawId:o.id, rest:o.restaurants?o.restaurants.name:'-', cust:o.customers?o.customers.name:'-',
-      total:o.total, status:mapDbStatusToAdmin(o.status), date:new Date(o.created_at).toLocaleString('th-TH'),
+      total:o.total, status:mapDbStatusToAdmin(o.status), selfDelivery:!!o.is_self_delivery, date:new Date(o.created_at).toLocaleString('th-TH'),
     }));
   } catch (err) { console.warn('refreshOrders failed', err); }
 }
 function mapDbStatusToAdmin(s){
   if (s==='delivered') return 'delivered';
   if (s==='cancelled') return 'cancelled';
-  if (s==='pending' || s==='preparing') return 'preparing';
-  return 'on_the_way';
+  if (s==='pending') return 'searching';
+  if (s==='preparing') return 'preparing';
+  return 'on_the_way'; // ready, picked_up
 }
 async function refreshSettings(){
   try {
     const { data, error } = await supabaseClient.from('platform_settings').select('*');
     if (error) throw error;
-    (data||[]).forEach(s => { if (s.key==='commission_rate') commissionRate = Number(s.value); if (s.key==='min_delivery_fee') minDeliveryFee = Number(s.value); });
+    (data||[]).forEach(s => {
+      if (s.key==='commission_rate') commissionRate = Number(s.value);
+      if (s.key==='min_delivery_fee') minDeliveryFee = Number(s.value);
+      if (s.key==='app_logo_url') appLogoUrl = s.value;
+    });
   } catch (err) { console.warn('refreshSettings failed', err); }
 }
 async function refreshTodayOrdersCount(){
@@ -374,6 +389,7 @@ const PAGES = [
   {id:'users', label:'ผู้ใช้งาน', icon:'👥'},
   {id:'orders', label:'คำสั่งซื้อ', icon:'🧾'},
   {id:'promos', label:'โปรโมชันหน้าแรก', icon:'🖼️'},
+  {id:'promocodes', label:'โค้ดส่วนลด', icon:'🏷️'},
   {id:'finance', label:'การเงิน', icon:'💰'},
 ];
 function setPage(p){ activePage=p; render(); }
@@ -460,6 +476,7 @@ function restaurantDetailHtml(r){
       <div class="detail-row"><span class="lbl">ที่อยู่</span><span class="val">${raw.address || '—'}</span></div>
       <div class="detail-row"><span class="lbl">พิกัด</span><span class="val">${raw.lat && raw.lng ? `<a href="${mapsLink(raw.lat, raw.lng)}" target="_blank">เปิดใน Google Maps</a>` : '—'}</span></div>
       <div class="detail-row"><span class="lbl">พร้อมเพย์</span><span class="val">${raw.promptpay_id || '—'}</span></div>
+      <div class="detail-row"><span class="lbl">โหมดจัดส่ง</span><span class="val">${raw.self_delivery_enabled ? '🎉 ส่งเองโดยทางร้าน' : '🏍️ ไรเดอร์ภายนอก'}</span></div>
       <div class="detail-section">เจ้าของร้าน</div>
       <div class="detail-row"><span class="lbl">ชื่อ-นามสกุล</span><span class="val">${(raw.owner_first_name||'')+' '+(raw.owner_last_name||'') || '—'}</span></div>
       <div class="detail-row"><span class="lbl">เบอร์โทร</span><span class="val">${raw.owner_phone || '—'}</span></div>
@@ -664,12 +681,66 @@ async function deletePromoBanner(id){
     showToast('ลบแบนเนอร์แล้ว'); await refreshPromos(); render();
   } catch(err){ console.error(err); showToast('ลบไม่สำเร็จ'); }
 }
+function previewLogoImage(){
+  const input = document.getElementById('logo-image');
+  const img = document.getElementById('logo-preview');
+  const file = input.files && input.files[0];
+  if (!file || !img) return;
+  const reader = new FileReader();
+  reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(file);
+}
+async function saveAppLogo(){
+  const file = document.getElementById('logo-image').files[0];
+  if (!file) { showToast('เลือกรูปโลโก้ก่อน'); return; }
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  const btn = document.getElementById('logo-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังอัปโหลด...'; }
+  try {
+    const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+    const path = `logo/${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabaseClient.storage.from('promo-banners').upload(path, file);
+    if (upErr) throw upErr;
+    const { data: pub } = supabaseClient.storage.from('promo-banners').getPublicUrl(path);
+    const { error } = await supabaseClient.from('platform_settings').upsert([{ key: 'app_logo_url', value: pub.publicUrl }]);
+    if (error) throw error;
+    appLogoUrl = pub.publicUrl;
+    showToast('บันทึกโลโก้แอปแล้ว');
+    render();
+  } catch (err) { console.error(err); showToast('บันทึกโลโก้ไม่สำเร็จ: ' + (err.message||'')); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = 'บันทึกโลโก้'; } }
+}
+async function removeAppLogo(){
+  if (!confirm('ลบโลโก้แอป กลับไปใช้ตัวอักษร "อ" แบบเดิม?')) return;
+  try {
+    const { error } = await supabaseClient.from('platform_settings').upsert([{ key: 'app_logo_url', value: '' }]);
+    if (error) throw error;
+    appLogoUrl = null; showToast('ลบโลโก้แล้ว'); render();
+  } catch (err) { console.error(err); showToast('ลบไม่สำเร็จ'); }
+}
 function renderPromos(){
   return `
-  ${header('โปรโมชันหน้าแรก','อัปโหลดรูปแบนเนอร์ให้ขึ้นบนแอปลูกค้า ไม่ต้องแก้โค้ด')}
+  ${header('โปรโมชันหน้าแรก','อัปโหลดรูปแบนเนอร์และโลโก้แอปให้ขึ้นบนแอปลูกค้า ไม่ต้องแก้โค้ด')}
   <div class="content">
     ${demoBannerHtml()}
     <div class="panel">
+      <div class="panel-head"><h2>โลโก้แอป</h2></div>
+      <div style="padding:0 18px 18px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+          ${appLogoUrl ? `<img src="${appLogoUrl}" style="width:64px;height:64px;border-radius:14px;object-fit:cover;border:1px solid var(--border);">` : `<div style="width:64px;height:64px;border-radius:14px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;">อ</div>`}
+          <div style="font-size:10.5px;color:var(--text-muted);margin-top:6px;text-align:center;">ตอนนี้</div>
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <input id="logo-image" type="file" accept="image/*" onchange="previewLogoImage()">
+          <img id="logo-preview" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:14px;margin-top:8px;">
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn-primary" id="logo-save-btn" onclick="saveAppLogo()" style="width:auto;margin-top:0;">บันทึกโลโก้</button>
+            ${appLogoUrl ? `<button class="btn-mini suspend" onclick="removeAppLogo()">ลบโลโก้</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
       <div class="panel-head"><h2>เพิ่มแบนเนอร์ใหม่</h2></div>
       <div style="padding:0 18px 18px;">
         <div class="f-group" style="margin-bottom:10px;"><label>รูปแบนเนอร์</label><input id="promo-image" type="file" accept="image/*" onchange="previewPromoImage()"></div>
@@ -698,6 +769,94 @@ function renderPromos(){
               </td>
             </tr>`).join('')}
           ${promoBanners.length===0 ? `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">ยังไม่มีแบนเนอร์</td></tr>` : ''}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============ โค้ดส่วนลด ============ */
+async function addPromoCode(){
+  const code = document.getElementById('pc-code').value.trim().toUpperCase();
+  const type = document.getElementById('pc-type').value;
+  const value = Number(document.getElementById('pc-value').value);
+  const minOrder = Number(document.getElementById('pc-min').value) || 0;
+  const maxDiscount = document.getElementById('pc-max').value ? Number(document.getElementById('pc-max').value) : null;
+  const usageLimit = document.getElementById('pc-limit').value ? Number(document.getElementById('pc-limit').value) : null;
+  const expiresAt = document.getElementById('pc-expires').value || null;
+  if (!code) { showToast('กรอกโค้ดก่อน'); return; }
+  if (!value || value <= 0) { showToast('กรอกมูลค่าส่วนลดให้ถูกต้อง'); return; }
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try {
+    const { error } = await supabaseClient.from('promo_codes').insert({
+      code, discount_type: type, discount_value: value, min_order: minOrder,
+      max_discount: maxDiscount, usage_limit: usageLimit, expires_at: expiresAt, active: true,
+    });
+    if (error) throw error;
+    showToast('เพิ่มโค้ดส่วนลดแล้ว');
+    document.getElementById('pc-code').value = '';
+    document.getElementById('pc-value').value = '';
+    await refreshPromoCodes(); render();
+  } catch (err) {
+    console.error(err);
+    if (String(err.message||'').includes('duplicate')) showToast('มีโค้ดนี้อยู่แล้ว ลองชื่ออื่น');
+    else showToast('เพิ่มไม่สำเร็จ: ' + (err.message||''));
+  }
+}
+async function togglePromoCodeActive(id, current){
+  try { const { error } = await supabaseClient.from('promo_codes').update({ active: !current }).eq('id', id); if (error) throw error;
+    await refreshPromoCodes(); render();
+  } catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function deletePromoCode(id){
+  if (!confirm('ลบโค้ดนี้ทิ้ง?')) return;
+  try { const { error } = await supabaseClient.from('promo_codes').delete().eq('id', id); if (error) throw error;
+    showToast('ลบโค้ดแล้ว'); await refreshPromoCodes(); render();
+  } catch(err){ console.error(err); showToast('ลบไม่สำเร็จ'); }
+}
+function renderPromoCodes(){
+  return `
+  ${header('โค้ดส่วนลด','สร้างโค้ดส่วนลดให้ลูกค้ากรอกตอนชำระเงิน')}
+  <div class="content">
+    ${demoBannerHtml()}
+    <div class="panel">
+      <div class="panel-head"><h2>สร้างโค้ดใหม่</h2></div>
+      <div class="form-grid">
+        <div class="f-group"><label>โค้ด</label><input id="pc-code" placeholder="เช่น IMDUAN50" style="text-transform:uppercase;"></div>
+        <div class="f-group"><label>ประเภทส่วนลด</label>
+          <select id="pc-type" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);">
+            <option value="fixed">ลดเป็นจำนวนเงิน (บาท)</option>
+            <option value="percent">ลดเป็นเปอร์เซ็นต์ (%)</option>
+          </select>
+        </div>
+        <div class="f-group"><label>มูลค่าส่วนลด</label><input id="pc-value" type="number" placeholder="เช่น 50 หรือ 20"></div>
+        <div class="f-group"><label>ยอดสั่งซื้อขั้นต่ำ (บาท)</label><input id="pc-min" type="number" value="0"></div>
+        <div class="f-group"><label>ลดสูงสุดไม่เกิน (บาท) — เฉพาะแบบ % เว้นว่างได้</label><input id="pc-max" type="number" placeholder="ไม่จำกัด"></div>
+        <div class="f-group"><label>จำนวนครั้งที่ใช้ได้ทั้งหมด — เว้นว่างได้</label><input id="pc-limit" type="number" placeholder="ไม่จำกัด"></div>
+        <div class="f-group"><label>วันหมดอายุ — เว้นว่างได้</label><input id="pc-expires" type="date"></div>
+      </div>
+      <div style="padding:0 18px 18px"><button class="btn-primary" onclick="addPromoCode()">สร้างโค้ด</button></div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-head"><h2>โค้ดทั้งหมด</h2></div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>โค้ด</th><th>ส่วนลด</th><th>ขั้นต่ำ</th><th>ใช้ไปแล้ว</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <tbody>
+          ${promoCodes.map(p=>`
+            <tr>
+              <td><b>${p.code}</b></td>
+              <td>${p.discount_type==='percent' ? p.discount_value+'%'+(p.max_discount?' (สูงสุด ฿'+p.max_discount+')':'') : '฿'+p.discount_value}</td>
+              <td>฿${p.min_order||0}</td>
+              <td>${p.used_count||0}${p.usage_limit?' / '+p.usage_limit:''}</td>
+              <td><span class="tag ${p.active?'active':'suspended'}">${p.active?'ใช้งานอยู่':'ปิดอยู่'}</span></td>
+              <td>
+                <button class="btn-mini ${p.active?'suspend':'approve'}" onclick="togglePromoCodeActive('${p.id}', ${p.active})">${p.active?'ปิด':'เปิด'}</button>
+                <button class="btn-mini suspend" onclick="deletePromoCode('${p.id}')">ลบ</button>
+              </td>
+            </tr>`).join('')}
+          ${promoCodes.length===0 ? `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">ยังไม่มีโค้ดส่วนลด</td></tr>` : ''}
         </tbody>
       </table>
       </div>
@@ -772,8 +931,8 @@ function renderUsers(){
 }
 
 /* ============ ORDERS ============ */
-const ORDER_STATUS_LABEL = {delivered:'จัดส่งสำเร็จ', on_the_way:'กำลังจัดส่ง', preparing:'กำลังปรุง/รอร้านรับ', cancelled:'ยกเลิก'};
-const ORDER_STATUS_TAG = {delivered:'active', on_the_way:'pending', preparing:'pending', cancelled:'suspended'};
+const ORDER_STATUS_LABEL = {delivered:'จัดส่งสำเร็จ', on_the_way:'กำลังจัดส่ง', preparing:'กำลังปรุง', searching:'กำลังหาไรเดอร์', cancelled:'ยกเลิก'};
+const ORDER_STATUS_TAG = {delivered:'active', on_the_way:'pending', preparing:'pending', searching:'pending', cancelled:'suspended'};
 function renderOrders(){
   return `
   ${header('คำสั่งซื้อทั้งหมด','ตรวจสอบคำสั่งซื้อทั่วทั้งแพลตฟอร์ม')}
@@ -786,7 +945,7 @@ function renderOrders(){
         <tbody>
           ${platformOrders.map(o=>`
             <tr>
-              <td><b>#${o.id}</b></td>
+              <td><b>#${o.id}</b>${o.selfDelivery ? ` <span class="tag active" style="font-size:9.5px;">ส่งเอง</span>` : ''}</td>
               <td>${o.rest}</td>
               <td>${o.cust}</td>
               <td>฿${o.total}</td>
@@ -858,6 +1017,7 @@ function render(){
   if (activePage==='users') page = renderUsers();
   if (activePage==='orders') page = renderOrders();
   if (activePage==='promos') page = renderPromos();
+  if (activePage==='promocodes') page = renderPromoCodes();
   if (activePage==='finance') page = renderFinance();
   const sbHtml = sidebarHtml().replace('class="sidebar"', `class="sidebar${sidebarOpen?' open':''}"`);
   let detailHtml = '';

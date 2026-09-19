@@ -127,7 +127,7 @@ let state = {
   restaurant: null,
   restaurantId: null,
   tab: 'new',
-  newOrders: [], preparingOrders: [], readyOrders: [], menu: [],
+  newOrders: [], searchingOrders: [], preparingOrders: [], readyOrders: [], pickedUpOrders: [], menu: [],
 };
 let ordersChannel = null;
 let activeSheet = null;
@@ -355,15 +355,18 @@ async function refreshOrders(){
   try {
     const { data, error } = await supabaseClient
       .from('orders')
-      .select('id,order_code,status,total,address,note,created_at,order_items(name,emoji,qty,price)')
+      .select('id,order_code,status,total,address,note,created_at,is_self_delivery,rider_id,order_items(name,emoji,qty,price)')
       .eq('restaurant_id', state.restaurantId)
-      .in('status', ['pending','preparing','ready'])
+      .in('status', ['pending','preparing','ready','picked_up'])
       .order('created_at', { ascending: true });
     if (error) throw error;
     const all = data || [];
-    state.newOrders = all.filter(o => o.status === 'pending');
+    // ร้านที่ไม่ได้เปิดจัดส่งเอง: ออเดอร์สถานะ pending คือ "กำลังหาไรเดอร์" ยังไม่ต้องทำอะไร จะโผล่ preparing เองเมื่อมีไรเดอร์รับ
+    state.newOrders = all.filter(o => o.status === 'pending' && o.is_self_delivery);
+    state.searchingOrders = all.filter(o => o.status === 'pending' && !o.is_self_delivery);
     state.preparingOrders = all.filter(o => o.status === 'preparing');
     state.readyOrders = all.filter(o => o.status === 'ready');
+    state.pickedUpOrders = all.filter(o => o.status === 'picked_up' && o.is_self_delivery);
   } catch (err) { console.warn('refreshOrders failed', err); }
 }
 async function refreshMenu(){
@@ -410,12 +413,21 @@ function subscribeOrders(){
   ordersChannel = supabaseClient
     .channel('merchant_orders_' + state.restaurantId)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
-      playAlertSound();
-      showBrowserNotification('🔔 มีออเดอร์ใหม่เข้ามา!', `ออเดอร์ #${payload.new.order_code || ''} รอการยืนยัน`);
-      showToast('🔔 มีออเดอร์ใหม่เข้ามา!');
+      // ร้านทั่วไป (ไม่ได้ส่งเอง) ยังไม่ต้องแจ้งตอนนี้ เพราะรอไรเดอร์รับงานก่อนถึงจะเริ่มปรุง
+      if (payload.new.is_self_delivery) {
+        playAlertSound();
+        showBrowserNotification('🔔 มีออเดอร์ใหม่เข้ามา!', `ออเดอร์ #${payload.new.order_code || ''} รอการยืนยัน`);
+        showToast('🔔 มีออเดอร์ใหม่เข้ามา!');
+      }
       await refreshOrders(); render();
     })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async () => {
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
+      // ไรเดอร์เพิ่งรับงาน (pending -> preparing) คือสัญญาณให้ครัวเริ่มทำอาหาร แจ้งเตือนตอนนี้แทน
+      if (payload.new.status === 'preparing' && payload.old && payload.old.status === 'pending' && !payload.new.is_self_delivery) {
+        playAlertSound();
+        showBrowserNotification('👨‍🍳 มีไรเดอร์รับงานแล้ว!', `เริ่มปรุงออเดอร์ #${payload.new.order_code || ''} ได้เลย`);
+        showToast('👨‍🍳 ไรเดอร์รับงานแล้ว เริ่มปรุงได้เลย!');
+      }
       await refreshOrders(); render();
     })
     .subscribe();
@@ -435,8 +447,28 @@ async function rejectOrder(id){
 }
 async function markReady(id){
   try { const { error } = await supabaseClient.from('orders').update({ status: 'ready' }).eq('id', id).eq('status','preparing'); if (error) throw error;
-    showToast('อาหารพร้อมแล้ว รอไรเดอร์มารับ'); await refreshOrders(); render();
+    showToast('อาหารพร้อมแล้ว'); await refreshOrders(); render();
   } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function selfDispatch(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'picked_up' }).eq('id', id).eq('status','ready'); if (error) throw error;
+    showToast('ออกจัดส่งแล้ว'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function selfDelivered(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id).eq('status','picked_up'); if (error) throw error;
+    showToast('ส่งถึงลูกค้าแล้ว! 🎉'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function toggleSelfDelivery(){
+  const newVal = !state.restaurant.self_delivery_enabled;
+  try {
+    const { error } = await supabaseClient.from('restaurants').update({ self_delivery_enabled: newVal }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.self_delivery_enabled = newVal;
+    showToast(newVal ? '🎉 เปิดโหมด "จัดส่งเองโดยทางร้าน" แล้ว' : 'ปิดโหมดจัดส่งเอง กลับไปใช้ไรเดอร์ภายนอก');
+    render();
+  } catch (err) { console.error(err); showToast('เปลี่ยนโหมดไม่สำเร็จ'); }
 }
 
 /* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
@@ -661,12 +693,16 @@ function topbar(){
     <div class="avatar">${r.emoji||'🏪'}</div>
     <div class="who"><div class="name">${r.name}</div><div class="sub" onclick="doLogout()" style="cursor:pointer;text-decoration:underline;">ออกจากระบบ</div></div>
     <div class="switch-box"><span class="switch-label">${r.status==='active'?'เปิดร้าน':(r.status==='suspended'?'ถูกระงับ':'รออนุมัติ')}</span></div>
+  </div>
+  <div class="gps-box" style="margin:0 18px 14px;">
+    <div><b>${r.self_delivery_enabled ? '🎉 จัดส่งเองโดยทางร้าน' : '🏍️ ใช้บริการไรเดอร์ภายนอก'}</b><br><span style="font-size:11px;color:var(--text-muted)">${r.self_delivery_enabled ? 'ลูกค้าเห็นป้ายส่งฟรี ค่าส่ง ฿0 ร้านจัดส่งเอง' : 'ระบบหาไรเดอร์ให้อัตโนมัติเมื่อมีออเดอร์'}</span></div>
+    <button class="switch ${r.self_delivery_enabled?'on':''}" onclick="toggleSelfDelivery()"></button>
   </div>`;
 }
 function tabsHtml(){
   const TABS = [
     { id:'new', label:'ออเดอร์ใหม่', cnt: state.newOrders.length },
-    { id:'active', label:'กำลังทำ/รอรับ', cnt: state.preparingOrders.length + state.readyOrders.length },
+    { id:'active', label:'กำลังทำ/จัดส่ง', cnt: state.searchingOrders.length + state.preparingOrders.length + state.readyOrders.length + state.pickedUpOrders.length },
     { id:'menu', label:'จัดการเมนู', cnt: 0 },
   ];
   return `<div class="tabs">${TABS.map(t=>`
@@ -689,15 +725,21 @@ function orderCardHtml(o, actionsHtml, tagClass, tagLabel){
   </div>`;
 }
 function renderNewTab(){
-  if (state.newOrders.length === 0) return `<div class="empty-state"><div class="e">🧾</div><h3>ยังไม่มีออเดอร์ใหม่</h3><p>ออเดอร์จากลูกค้าจะขึ้นที่นี่ทันที</p></div>`;
+  if (state.newOrders.length === 0) return `<div class="empty-state"><div class="e">🧾</div><h3>ยังไม่มีออเดอร์ใหม่</h3><p>${state.restaurant.self_delivery_enabled ? 'ออเดอร์จากลูกค้าจะขึ้นที่นี่ทันที' : 'เปิดโหมด "จัดส่งเอง" ด้านบนถ้าอยากรับออเดอร์เข้ามาที่แท็บนี้โดยตรง — ตอนนี้ระบบหาไรเดอร์ให้อัตโนมัติก่อนแทน'}</p></div>`;
   return state.newOrders.map(o => orderCardHtml(o, `
     <div class="order-actions"><button class="btn-mini reject" onclick="rejectOrder('${o.id}')">ปฏิเสธ</button><button class="btn-mini accept" onclick="acceptOrder('${o.id}')">รับออเดอร์</button></div>`, 'pending', 'รอรับออเดอร์')).join('');
 }
 function renderActiveTab(){
-  if (state.preparingOrders.length === 0 && state.readyOrders.length === 0) return `<div class="empty-state"><div class="e">👨‍🍳</div><h3>ไม่มีออเดอร์ที่กำลังทำอยู่</h3></div>`;
+  const total = state.searchingOrders.length + state.preparingOrders.length + state.readyOrders.length + state.pickedUpOrders.length;
+  if (total === 0) return `<div class="empty-state"><div class="e">👨‍🍳</div><h3>ไม่มีออเดอร์ที่กำลังทำอยู่</h3></div>`;
   return `
+  ${state.searchingOrders.map(o => orderCardHtml(o, `<div class="order-addr" style="margin-top:10px;">🔍 กำลังหาไรเดอร์ให้อัตโนมัติ... ระบบจะแจ้งให้เริ่มปรุงทันทีที่มีไรเดอร์รับงาน</div>`, 'pending', 'หาไรเดอร์')).join('')}
   ${state.preparingOrders.map(o => orderCardHtml(o, `<div class="order-actions"><button class="btn-mini ready" onclick="markReady('${o.id}')">อาหารพร้อมแล้ว</button></div>`, 'preparing', 'กำลังปรุง')).join('')}
-  ${state.readyOrders.map(o => orderCardHtml(o, `<div class="order-addr" style="margin-top:10px;">🏍️ รอไรเดอร์มารับอาหาร</div>`, 'ready', 'พร้อมส่ง')).join('')}
+  ${state.readyOrders.map(o => o.is_self_delivery
+      ? orderCardHtml(o, `<div class="order-actions"><button class="btn-mini ready" onclick="selfDispatch('${o.id}')">🏍️ ออกจัดส่งเอง</button></div>`, 'ready', 'พร้อมส่ง')
+      : orderCardHtml(o, `<div class="order-addr" style="margin-top:10px;">🏍️ รอไรเดอร์มารับอาหาร</div>`, 'ready', 'พร้อมส่ง')
+    ).join('')}
+  ${state.pickedUpOrders.map(o => orderCardHtml(o, `<div class="order-actions"><button class="btn-mini ready" onclick="selfDelivered('${o.id}')">✅ ส่งถึงลูกค้าแล้ว</button></div>`, 'ready', 'กำลังจัดส่ง')).join('')}
   `;
 }
 function renderMenuTab(){
