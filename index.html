@@ -198,6 +198,13 @@
   .rest-thumb {
     width: 76px; height: 76px; border-radius: var(--radius-s); flex-shrink: 0;
     display: flex; align-items: center; justify-content: center; font-size: 34px;
+    background-size: cover; background-position: center; position: relative; overflow: hidden;
+  }
+  .rest-card { position: relative; }
+  .featured-ribbon {
+    position: absolute; top: -6px; left: 8px; background: var(--accent); color: #fff;
+    font-size: 9.5px; font-weight: 800; padding: 2px 8px; border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2); z-index: 1;
   }
   .rest-info { flex: 1; min-width: 0; }
   .rest-name-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -544,6 +551,7 @@ function mapRestaurantRow(r) {
     id: r.id, name: r.name, cat: r.category || 'other', emoji: r.emoji || '🍽️', color: r.color || '#FDEDE3',
     tags: r.tags || '', rating: r.rating || 0, time: r.prep_time || '20-30 นาที', price: r.price_level || '฿฿',
     promo: r.promo || null, selfDelivery: !!r.self_delivery_enabled,
+    cover: r.storefront_url || null, featured: !!r.is_featured,
     menu: Object.keys(groups).map(g => ({ group: g, items: groups[g] })),
   };
 }
@@ -611,7 +619,7 @@ async function init() {
     try {
       const { data, error } = await supabaseClient
         .from('restaurants')
-        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
+        .select('id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,storefront_url,menu_items(id,group_name,name,description,price,emoji,is_available,image_url)')
         .eq('status', 'active')
         .eq('is_open', true)
         .order('is_featured', { ascending: false })
@@ -1152,7 +1160,7 @@ function demoBannerHtml() {
 }
 function topbar() {
   const logoHtml = appLogoUrl
-    ? `<img src="${appLogoUrl}" style="width:36px;height:36px;border-radius:10px;object-fit:cover;">`
+    ? `<img src="${appLogoUrl}" style="height:36px;width:auto;max-width:120px;object-fit:contain;display:block;">`
     : `<div class="logo-mark">อ</div>`;
   return `
   <div class="topbar">
@@ -1242,7 +1250,8 @@ function restaurantListHtml(list) {
   }
   return list.map(r => `
     <button class="rest-card" onclick="openRestaurant('${r.id}')">
-      <div class="rest-thumb" style="background:${r.color}">${r.emoji}</div>
+      ${r.featured ? `<div class="featured-ribbon">⭐ แนะนำ</div>` : ''}
+      <div class="rest-thumb" style="${r.cover ? `background-image:url('${r.cover}');` : `background:${r.color}`}">${r.cover ? '' : r.emoji}</div>
       <div class="rest-info">
         <div class="rest-name-row"><div class="rest-name">${r.name}</div>${r.selfDelivery ? `<div class="promo-tag">🎉 ส่งฟรี</div>` : (r.promo ? `<div class="promo-tag">${r.promo}</div>` : '')}</div>
         <div class="rest-tags">${r.tags}</div>
@@ -1287,9 +1296,9 @@ function renderDetail() {
     }).join('')}
   `).join('');
   return `
-  <div class="detail-header" style="background:linear-gradient(160deg, ${r.color}, var(--secondary))">
+  <div class="detail-header" style="${r.cover ? `background-image:url('${r.cover}');background-size:cover;background-position:center;` : `background:linear-gradient(160deg, ${r.color}, var(--secondary))`}">
     <button class="back-btn" onclick="setView('home')">←</button>
-    <div class="emoji-big">${r.emoji}</div>
+    ${r.cover ? '' : `<div class="emoji-big">${r.emoji}</div>`}
   </div>
   <div class="detail-sub">
     <h1 style="font-size:20px">${r.name}</h1>

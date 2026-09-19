@@ -727,12 +727,12 @@ function renderPromos(){
       <div class="panel-head"><h2>โลโก้แอป</h2></div>
       <div style="padding:0 18px 18px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
         <div>
-          ${appLogoUrl ? `<img src="${appLogoUrl}" style="width:64px;height:64px;border-radius:14px;object-fit:cover;border:1px solid var(--border);">` : `<div style="width:64px;height:64px;border-radius:14px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;">อ</div>`}
+          ${appLogoUrl ? `<img src="${appLogoUrl}" style="max-width:120px;max-height:64px;object-fit:contain;display:block;">` : `<div style="width:64px;height:64px;border-radius:14px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;">อ</div>`}
           <div style="font-size:10.5px;color:var(--text-muted);margin-top:6px;text-align:center;">ตอนนี้</div>
         </div>
         <div style="flex:1;min-width:220px;">
           <input id="logo-image" type="file" accept="image/*" onchange="previewLogoImage()">
-          <img id="logo-preview" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:14px;margin-top:8px;">
+          <img id="logo-preview" style="display:none;max-width:120px;max-height:64px;object-fit:contain;margin-top:8px;">
           <div style="display:flex;gap:8px;margin-top:10px;">
             <button class="btn-primary" id="logo-save-btn" onclick="saveAppLogo()" style="width:auto;margin-top:0;">บันทึกโลโก้</button>
             ${appLogoUrl ? `<button class="btn-mini suspend" onclick="removeAppLogo()">ลบโลโก้</button>` : ''}
@@ -875,6 +875,20 @@ async function suspendRider(id){
   try { const { error } = await supabaseClient.from('riders').update({status:'pending'}).eq('id',id); if (error) throw error; showToast('ระงับไรเดอร์แล้ว'); await refreshRiders(); render(); }
   catch(err){ console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
 }
+async function deleteRiderPermanently(id, name){
+  if (!confirm(`ลบไรเดอร์ "${name}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try {
+    const { error } = await supabaseClient.from('riders').delete().eq('id', id);
+    if (error) throw error;
+    showToast('ลบไรเดอร์แล้ว'); await refreshRiders(); render();
+  } catch(err) {
+    console.error(err);
+    if (String(err.message||'').toLowerCase().includes('foreign key') || String(err.code)==='23503') {
+      showToast('ลบไม่ได้ เพราะไรเดอร์นี้มีประวัติออเดอร์อยู่ — ใช้ปุ่ม "ระงับ" แทน');
+    } else showToast('ลบไม่สำเร็จ: ' + (err.message||''));
+  }
+}
 const RIDER_TAG = {online:'ออนไลน์', offline:'ออฟไลน์', pending:'รออนุมัติ'};
 function renderRiders(){
   return `
@@ -896,6 +910,7 @@ function renderRiders(){
               <td>
                 <button class="btn-mini outline" onclick="openDetail('rider','${r.id}')">รายละเอียด</button>
                 ${r.status==='pending' ? `<button class="btn-mini approve" onclick="approveRider('${r.id}')">อนุมัติ</button>` : `<button class="btn-mini outline" onclick="suspendRider('${r.id}')">ระงับ</button>`}
+                <button class="btn-mini suspend" onclick="deleteRiderPermanently('${r.id}', '${r.name.replace(/'/g,"\\'")}')">ลบ</button>
               </td>
             </tr>`).join('')}
         </tbody>
@@ -906,6 +921,20 @@ function renderRiders(){
 }
 
 /* ============ USERS ============ */
+async function deleteUserPermanently(id, name){
+  if (!confirm(`ลบบัญชีลูกค้า "${name}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try {
+    const { error } = await supabaseClient.from('customers').delete().eq('id', id);
+    if (error) throw error;
+    showToast('ลบบัญชีลูกค้าแล้ว'); await refreshUsers(); render();
+  } catch(err) {
+    console.error(err);
+    if (String(err.message||'').toLowerCase().includes('foreign key') || String(err.code)==='23503') {
+      showToast('ลบไม่ได้ เพราะลูกค้ารายนี้มีประวัติออเดอร์อยู่');
+    } else showToast('ลบไม่สำเร็จ: ' + (err.message||''));
+  }
+}
 function renderUsers(){
   return `
   ${header('ผู้ใช้งาน','รายชื่อลูกค้าที่ลงทะเบียนในระบบ')}
@@ -914,7 +943,7 @@ function renderUsers(){
     <div class="panel">
       <div class="table-scroll">
       <table>
-        <thead><tr><th>ลูกค้า</th><th>สมัครเมื่อ</th><th>จำนวนออเดอร์สำเร็จ</th><th>ยอดใช้จ่ายสะสม</th></tr></thead>
+        <thead><tr><th>ลูกค้า</th><th>สมัครเมื่อ</th><th>จำนวนออเดอร์สำเร็จ</th><th>ยอดใช้จ่ายสะสม</th><th>จัดการ</th></tr></thead>
         <tbody>
           ${users.map(u=>`
             <tr>
@@ -922,6 +951,7 @@ function renderUsers(){
               <td>${u.joined}</td>
               <td>${u.orders} ครั้ง</td>
               <td>฿${u.spent.toLocaleString('th-TH')}</td>
+              <td><button class="btn-mini suspend" onclick="deleteUserPermanently('${u.id}', '${u.name.replace(/'/g,"\\'")}')">ลบ</button></td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -933,6 +963,21 @@ function renderUsers(){
 /* ============ ORDERS ============ */
 const ORDER_STATUS_LABEL = {delivered:'จัดส่งสำเร็จ', on_the_way:'กำลังจัดส่ง', preparing:'กำลังปรุง', searching:'กำลังหาไรเดอร์', cancelled:'ยกเลิก'};
 const ORDER_STATUS_TAG = {delivered:'active', on_the_way:'pending', preparing:'pending', searching:'pending', cancelled:'suspended'};
+async function deleteOrderPermanently(rawId, code){
+  if (!confirm(`ลบออเดอร์ "#${code}" ทิ้งถาวร? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+  if (dataSource==='mock'){ showToast('ใช้ได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง'); return; }
+  try {
+    // ลบข้อมูลที่ผูกกับออเดอร์นี้ก่อน กัน foreign key ชน
+    await supabaseClient.from('order_items').delete().eq('order_id', rawId);
+    await supabaseClient.from('order_messages').delete().eq('order_id', rawId);
+    const { error } = await supabaseClient.from('orders').delete().eq('id', rawId);
+    if (error) throw error;
+    showToast('ลบออเดอร์แล้ว'); await refreshOrders(); render();
+  } catch(err) {
+    console.error(err);
+    showToast('ลบไม่สำเร็จ: ' + (err.message||''));
+  }
+}
 function renderOrders(){
   return `
   ${header('คำสั่งซื้อทั้งหมด','ตรวจสอบคำสั่งซื้อทั่วทั้งแพลตฟอร์ม')}
@@ -941,7 +986,7 @@ function renderOrders(){
     <div class="panel">
       <div class="table-scroll">
       <table>
-        <thead><tr><th>รหัสออเดอร์</th><th>ร้านค้า</th><th>ลูกค้า</th><th>ยอดรวม</th><th>สถานะ</th><th>เวลา</th></tr></thead>
+        <thead><tr><th>รหัสออเดอร์</th><th>ร้านค้า</th><th>ลูกค้า</th><th>ยอดรวม</th><th>สถานะ</th><th>เวลา</th><th>จัดการ</th></tr></thead>
         <tbody>
           ${platformOrders.map(o=>`
             <tr>
@@ -951,6 +996,7 @@ function renderOrders(){
               <td>฿${o.total}</td>
               <td><span class="tag ${ORDER_STATUS_TAG[o.status]}">${ORDER_STATUS_LABEL[o.status]}</span></td>
               <td style="color:var(--text-muted)">${o.date}</td>
+              <td><button class="btn-mini suspend" onclick="deleteOrderPermanently('${o.rawId}', '${o.id}')">ลบ</button></td>
             </tr>`).join('')}
         </tbody>
       </table>

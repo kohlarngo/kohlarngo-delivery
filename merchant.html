@@ -191,7 +191,8 @@ async function doSignup(){
   const storefrontFile = document.getElementById('sp-storefront').files[0];
   const idCardFile = document.getElementById('sp-owner-idcard').files[0];
 
-  if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
+  if (!username || !password) { showToast('กรอกไอดีและรหัสผ่าน'); return; }
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { showToast('ไอดีต้องเป็นภาษาอังกฤษ a-z, ตัวเลข 0-9 หรือ _ เท่านั้น (3-20 ตัวอักษร) ห้ามมีภาษาไทยหรือเว้นวรรค'); return; }
   if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
   if (!nameTh) { showToast('กรอกชื่อร้าน (ภาษาไทย)'); return; }
   if (!category) { showToast('เลือกประเภทร้านค้า'); return; }
@@ -500,6 +501,20 @@ async function toggleOpenStatus(){
     render();
   } catch (err) { console.error(err); showToast('เปลี่ยนสถานะร้านไม่สำเร็จ'); }
 }
+async function updateStorefrontPhoto(){
+  const input = document.getElementById('storefront-update-input');
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  showToast('กำลังอัปโหลดรูปหน้าร้าน...');
+  try {
+    const url = await uploadPublicFile('storefront-images', state.restaurantId, file);
+    const { error } = await supabaseClient.from('restaurants').update({ storefront_url: url }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.storefront_url = url;
+    showToast('อัปเดตรูปหน้าร้านแล้ว ลูกค้าจะเห็นรูปใหม่ทันที');
+    render();
+  } catch (err) { console.error(err); showToast('อัปโหลดรูปไม่สำเร็จ: ' + (err.message||'')); }
+}
 
 /* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
 function openAddItemSheet(){ activeSheet = 'add-item'; render(); }
@@ -570,8 +585,8 @@ function authHtml(){
       <div class="onboard-emoji">🏪</div>
       <h2 style="font-size:17px;margin-top:10px;">เข้าสู่ระบบร้านค้า</h2>
       <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">เข้าสู่ระบบด้วยชื่อผู้ใช้ที่ตั้งไว้</p>
-      <div class="f-label">ชื่อผู้ใช้</div>
-      <input id="auth-username" type="text" class="f-input" placeholder="ชื่อผู้ใช้ของร้าน" autocomplete="username">
+      <div class="f-label">ไอดี</div>
+      <input id="auth-username" type="text" class="f-input" placeholder="ไอดีของร้าน (a-z, 0-9)" autocomplete="username">
       <div class="f-label">รหัสผ่าน</div>
       <input id="auth-password" type="password" class="f-input" placeholder="รหัสผ่าน" autocomplete="current-password">
       <button class="btn-primary" onclick="doLogin()">เข้าสู่ระบบ</button>
@@ -591,8 +606,9 @@ function authHtml(){
     </div>
 
     <div class="form-section-title">บัญชีผู้ใช้</div>
-    <div class="f-label" style="margin-top:0;">ชื่อผู้ใช้</div>
-    <input id="auth-username" type="text" class="f-input" placeholder="ตั้งชื่อผู้ใช้ของร้าน" autocomplete="username">
+    <div class="f-label" style="margin-top:0;">ไอดี (ภาษาอังกฤษ/ตัวเลขเท่านั้น)</div>
+    <input id="auth-username" type="text" class="f-input" placeholder="เช่น myshop01" autocomplete="username" pattern="[a-zA-Z0-9_]{3,20}" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_]/g,'')">
+    <div class="f-hint" style="font-size:11px;color:var(--text-muted);margin-top:2px;">ใช้ตัวอักษร a-z, ตัวเลข 0-9 หรือ _ เท่านั้น (3-20 ตัวอักษร) จำง่ายกว่าใช้ชื่อภาษาไทย</div>
     <div class="f-label">รหัสผ่าน</div>
     <input id="auth-password" type="password" class="f-input" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
 
@@ -732,6 +748,13 @@ function topbar(){
   <div class="gps-box" style="margin:0 18px 14px;">
     <div><b>${r.self_delivery_enabled ? '🎉 จัดส่งเองโดยทางร้าน' : '🏍️ ใช้บริการไรเดอร์ภายนอก'}</b><br><span style="font-size:11px;color:var(--text-muted)">${r.self_delivery_enabled ? 'ลูกค้าเห็นป้ายส่งฟรี ค่าส่ง ฿0 ร้านจัดส่งเอง' : 'ระบบหาไรเดอร์ให้อัตโนมัติเมื่อมีออเดอร์'}</span></div>
     <button class="switch ${r.self_delivery_enabled?'on':''}" onclick="toggleSelfDelivery()"></button>
+  </div>
+  <div class="gps-box" style="margin:0 18px 14px;flex-direction:column;align-items:stretch;gap:8px;">
+    <div style="display:flex;gap:10px;align-items:center;">
+      ${r.storefront_url ? `<img src="${r.storefront_url}" style="width:56px;height:56px;object-fit:cover;border-radius:10px;flex-shrink:0;">` : `<div style="width:56px;height:56px;border-radius:10px;background:${r.color||'var(--surface-2)'};display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">${r.emoji||'🏪'}</div>`}
+      <div style="flex:1;"><b style="font-size:12.5px;">รูปหน้าร้าน (cover)</b><br><span style="font-size:11px;color:var(--text-muted)">ลูกค้าเห็นรูปนี้ในหน้าแรกและหน้าร้านของคุณ</span></div>
+    </div>
+    <input id="storefront-update-input" type="file" accept="image/*" style="font-size:11.5px;" onchange="updateStorefrontPhoto()">
   </div>`;
 }
 function tabsHtml(){
