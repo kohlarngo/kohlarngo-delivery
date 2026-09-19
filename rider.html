@@ -379,7 +379,11 @@ function usernameToEmail(username) {
   let hash = 5381;
   for (let i = 0; i < norm.length; i++) { hash = ((hash << 5) + hash + norm.charCodeAt(i)) >>> 0; }
   const slug = norm.replace(/[^a-z0-9]/g, '').slice(0, 20) || 'u';
-  return `${slug}${hash.toString(36)}@riders.imduan.internal`;
+  // หมายเหตุ: เดิมใช้โดเมน "riders.imduan.internal" แต่ .internal เป็น TLD ที่สงวนไว้
+  // (reserved TLD ตาม RFC 6761 เหมือน .local/.test/.invalid) ทำให้ Supabase Auth ปฏิเสธ
+  // อีเมลนี้เวลาต้องส่งอีเมลจริง เช่น "Send password recovery" (error: "Email address ... is invalid")
+  // เปลี่ยนมาใช้โดเมนที่ไม่ถูกสงวนแทน เพื่อให้ signUp/signIn/reset password ทำงานได้ปกติ
+  return `${slug}${hash.toString(36)}@riders.imduan-app.com`;
 }
 
 /* ============ MOCK DATA (fallback เมื่อยังไม่เชื่อม Supabase) ============ */
