@@ -1726,7 +1726,8 @@ function renderTracking() {
 }
 function initLiveTrackingMap(o) {
   const mapContainer = document.getElementById('live-tracking-map');
-  if (!mapContainer || typeof L === 'undefined' || liveMap) return;
+  if (!mapContainer || typeof L === 'undefined') return;
+  if (liveMap) { liveMap.remove(); liveMap = null; riderMarker = null; }
   liveMap = L.map('live-tracking-map').setView([13.7563, 100.5018], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(liveMap);
   carIconRef = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/3097/3097180.png', iconSize: [38,38], iconAnchor: [19,19] });
