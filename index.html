@@ -1,8 +1,10 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="th" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#FF6B00">
 <title>อิ่มด่วน — สั่งอาหารส่งถึงบ้าน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -82,7 +84,7 @@
     letter-spacing: -0.01em;
   }
   a { color: inherit; }
-  button { font-family: inherit; cursor: pointer; }
+  button { font-family: inherit; cursor: pointer; color: inherit; -webkit-tap-highlight-color: transparent; }
   img { max-width: 100%; }
   ::selection { background: var(--secondary); color: var(--text); }
 
@@ -817,6 +819,7 @@ const I18N = {
   'ส่งรหัส OTP': ['Send OTP code', '发送验证码'],
   'กำลังส่ง...': ['Sending...', '发送中...'],
   'ส่งรหัสไปที่': ['Code sent to', '验证码已发送至'],
+  'ถ้าอีเมลมีแต่ลิงก์ ให้กดลิงก์ในอีเมลบนเครื่องนี้ได้เลย': ['If the email only has a link, open it on this device', '如果邮件中只有链接，请在本设备上点击该链接'],
   'กรอกรหัสจากอีเมล': ['Enter the code from your email', '输入邮件中的验证码'],
   'ยืนยันรหัส': ['Verify code', '验证'],
   'กำลังตรวจสอบ...': ['Verifying...', '验证中...'],
@@ -825,7 +828,7 @@ const I18N = {
   'วินาที': ['s', '秒'],
   'เปลี่ยนอีเมล': ['Change email', '更换邮箱'],
   'กรุณากรอกอีเมลให้ถูกต้อง': ['Please enter a valid email', '请输入有效的邮箱'],
-  'ส่งรหัส OTP แล้ว ตรวจสอบกล่องอีเมล (รวมถึงจดหมายขยะ)': ['OTP sent — check your inbox (and spam)', '验证码已发送 — 请查看收件箱（包括垃圾邮件）'],
+  'ส่งอีเมลแล้ว กรอกรหัส หรือกดลิงก์ในอีเมลก็ได้': ['Email sent — enter the code or tap the link in the email', '邮件已发送 — 输入验证码或点击邮件中的链接'],
   'ส่งรหัสไม่สำเร็จ': ['Could not send code', '验证码发送失败'],
   'รหัสไม่ถูกต้องหรือหมดอายุ': ['Invalid or expired code', '验证码错误或已过期'],
   'เข้าสู่ระบบสำเร็จ': ['Signed in', '登录成功'],
@@ -1084,6 +1087,14 @@ async function init() {
     if (dataSource === 'supabase') {
       try {
         await ensureSession();
+        // กลับมาจากลิงก์ในอีเมล (กรณีอีเมลยังส่งเป็นลิงก์ ไม่ใช่รหัส) → ย้ายประวัติจากบัญชีชั่วคราว
+        if (!state.isAnonymous) {
+          try {
+            const tok = localStorage.getItem('imduan_guest_claim');
+            if (tok) { await supabaseClient.rpc('claim_guest_data', { p_token: tok }); localStorage.removeItem('imduan_guest_claim'); }
+          } catch(e) { console.warn('claim_guest_data unavailable', e); }
+          try { const { data: u } = await supabaseClient.auth.getUser(); state.email = u && u.user ? (u.user.email || '') : ''; } catch(e) {}
+        }
         await ensureCustomerRow();
       } catch (err) {
         // มักเกิดจากยังไม่เปิด "Allow anonymous sign-ins" ใน Supabase Authentication > Providers
@@ -2255,7 +2266,7 @@ function otpBlockHtml(){
     return `
     <div class="profile-card">
       <div class="pc-title">📩 กรอกรหัสจากอีเมล</div>
-      <div class="pc-sub">ส่งรหัสไปที่ <b translate="no">${escHtml(otpState.email)}</b></div>
+      <div class="pc-sub">ส่งรหัสไปที่ <b translate="no">${escHtml(otpState.email)}</b><br>ถ้าอีเมลมีแต่ลิงก์ ให้กดลิงก์ในอีเมลบนเครื่องนี้ได้เลย</div>
     </div>
     <input class="field-input otp-input" id="otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="••••••" style="margin-top:12px;" oninput="this.value=this.value.replace(/\\D/g,''); if(this.value.length>=6 && this.value.length===this.maxLength) verifyEmailOtp();">
     <button class="btn-primary" id="otp-verify-btn" ${otpState.verifying ? 'disabled' : ''} onclick="verifyEmailOtp()">${otpState.verifying ? 'กำลังตรวจสอบ...' : 'ยืนยันรหัส'}</button>
@@ -2339,11 +2350,11 @@ async function sendEmailOtp(isResend){
         if (!tokErr && tok) { try { localStorage.setItem('imduan_guest_claim', tok); } catch(e) {} }
       } catch(e) { console.warn('create_guest_claim unavailable', e); }
     }
-    const { error } = await supabaseClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    const { error } = await supabaseClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname } });
     if (error) throw error;
     const mode = 'email';
     otpState.mode = mode; otpState.step = 'code';
-    showToast('ส่งรหัส OTP แล้ว ตรวจสอบกล่องอีเมล (รวมถึงจดหมายขยะ)');
+    showToast('ส่งอีเมลแล้ว กรอกรหัส หรือกดลิงก์ในอีเมลก็ได้');
     startOtpCooldown();
   } catch (err) {
     console.error(err);
