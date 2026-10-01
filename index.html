@@ -343,12 +343,14 @@
   .pay-option.selected .dot::after { content:''; position:absolute; inset:3px; background: var(--primary); border-radius: 50%; }
 
   /* ---------- checkout map + promptpay ---------- */
-  .checkout-map { margin: 8px 20px 0; height: 170px; border-radius: var(--radius-m); border: 1.5px solid var(--border); overflow: hidden; z-index: 0; position: relative; }
+  .checkout-map { margin: 0 20px; height: 200px; border-radius: var(--radius-m); border: 1px solid var(--border); overflow: hidden; z-index: 0; position: relative; }
+  .map-gps-btn { display: block; width: calc(100% - 40px); margin: 10px 20px 0; padding: 12px; background: var(--surface-2); color: var(--primary); border: 1px solid var(--border); border-radius: var(--radius-s); font-weight: 700; font-size: 13.5px; font-family: inherit; cursor: pointer; }
+  .map-gps-btn:active { opacity: .8; }
   .checkout-map { isolation: isolate; }
   .checkout-map .leaflet-pane, .checkout-map .leaflet-tile, .checkout-map .leaflet-marker-icon, .checkout-map .leaflet-tile-container { position: absolute; left: 0; top: 0; }
   .checkout-map .leaflet-tile { max-width: none !important; width: 256px; height: 256px; }
   .checkout-map .leaflet-top, .checkout-map .leaflet-bottom { position: absolute; z-index: 1000; }
-  .map-hint { font-size: 11px; color: var(--text-muted); padding: 5px 20px 0; }
+  .map-hint { font-size: 12px; color: var(--text-muted); padding: 8px 20px 0; line-height: 1.5; }
   .pp-box { margin: 4px 20px 6px; padding: 14px; border: 1.5px dashed var(--primary); border-radius: var(--radius-m); background: var(--surface-2); text-align: center; }
   .pp-box img.pp-qr { width: 210px; max-width: 100%; border-radius: 10px; background: #fff; padding: 6px; display: block; margin: 8px auto; }
   .pp-amount { font-size: 20px; font-weight: 800; color: var(--primary); }
@@ -356,6 +358,20 @@
   .slip-upload { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; padding: 11px; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font-weight: 700; font-size: 13.5px; cursor: pointer; }
   .slip-preview { max-width: 140px; max-height: 200px; border-radius: 8px; margin: 10px auto 0; display: block; border: 1px solid var(--border); }
   .pay-option.disabled { opacity: .45; pointer-events: none; }
+
+  /* ---------- language switch + profile ---------- */
+  .lang-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; background: var(--surface); flex-shrink: 0; }
+  .lang-switch button { border: none; background: transparent; color: var(--text-muted); font-size: 11.5px; font-weight: 700; padding: 6px 9px; font-family: inherit; }
+  .lang-switch button.on { background: var(--primary); color: var(--primary-ink); }
+  .profile-card { margin: 6px 20px 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-m); background: var(--surface-2); }
+  .profile-card .pc-title { font-weight: 800; font-size: 14px; }
+  .profile-card .pc-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+  .otp-input { letter-spacing: 8px; font-size: 22px !important; text-align: center; font-weight: 800; }
+  .link-btn { background: none; border: none; color: var(--primary); font-weight: 700; font-size: 13px; padding: 10px 0 0; font-family: inherit; cursor: pointer; }
+  .link-btn:disabled { color: var(--text-muted); cursor: default; }
+  .or-sep { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px; margin: 16px 20px 0; }
+  .or-sep::before, .or-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .hero-slide.clickable { cursor: pointer; }
 
   /* ---------- empty states ---------- */
   .empty-state { text-align: center; padding: 60px 30px; color: var(--text-muted); }
@@ -611,6 +627,301 @@ const MOCK_RESTAURANTS = [
   },
 ];
 
+/* ============ I18N: TH / EN / 中文 ============ */
+// แปลข้อความหน้าจอทั้งหมดอัตโนมัติ (ไม่แปลชื่อร้าน/เมนู/ที่อยู่ ที่มาจากฐานข้อมูล)
+const I18N = {
+  // ---- ประโยคยาว ----
+  'ยังไม่เชื่อมฐานข้อมูลจริง (ใส่ Supabase anon key ในโค้ด) — ตอนนี้แสดงข้อมูลตัวอย่างเท่านั้น ออเดอร์จะไม่ถูกส่งไปที่ร้านค้าหรือไรเดอร์จริง': ['Not connected to the real database — showing sample data only. Orders will not reach real shops or riders.', '尚未连接真实数据库 — 目前仅显示示例数据，订单不会发送给真实商家或骑手。'],
+  'ต้องเปิด "Allow anonymous sign-ins" ใน Supabase Dashboard > Authentication > Providers ก่อน แล้วรีเฟรชหน้านี้ใหม่ (ยังสั่งอาหารแบบไม่ล็อกอินได้ตามปกติ)': ['Enable "Allow anonymous sign-ins" in Supabase first, then refresh this page.', '请先在 Supabase 中开启 "Allow anonymous sign-ins"，然后刷新此页面。'],
+  'ยังสั่งจริงไม่ได้ — ต้องเปิด Allow anonymous sign-ins ใน Supabase ก่อน (ตอนนี้เป็นแค่ตัวอย่าง)': ['Real orders are not available yet (sample mode).', '暂时无法真实下单（示例模式）。'],
+  'ตะกร้าของคุณมีสินค้าจากร้านอื่นอยู่ เริ่มตะกร้าใหม่สำหรับร้านนี้หรือไม่?': ['Your cart has items from another shop. Start a new cart for this shop?', '购物车中有其他店铺的商品，要为这家店重新开始购物车吗？'],
+  'กรุณากรอกเบอร์โทรให้ถูกต้อง (9-10 หลัก ขึ้นต้นด้วย 0)': ['Please enter a valid phone number (9–10 digits, starting with 0)', '请输入正确的电话号码（9–10 位，以 0 开头）'],
+  'เข้าสู่ระบบแล้ว ประวัติการสั่งซื้อของคุณถูกเก็บไว้ถาวร': ['Signed in — your order history is saved permanently', '已登录 — 您的订单记录将被永久保存'],
+  'ระบบเข้าสู่ระบบจะใช้ได้เมื่อเชื่อม Supabase แล้ว': ['Sign-in works once Supabase is connected', '连接 Supabase 后即可登录'],
+  'ไม่สามารถเข้าถึงไมโครโฟนได้ กรุณาอนุญาตสิทธิ์': ['Cannot access the microphone. Please allow permission.', '无法使用麦克风，请允许权限。'],
+  'เติมที่อยู่ให้แล้ว ตรวจสอบบ้านเลขที่อีกครั้ง': ['Address filled in — please check your house number', '已自动填写地址 — 请核对门牌号'],
+  'ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตสิทธิ์ GPS': ['Cannot access your location. Please allow GPS permission.', '无法获取位置，请允许 GPS 权限。'],
+  'ไม่สามารถเข้าถึงตำแหน่งได้': ['Cannot access your location', '无法获取位置'],
+  'ลองค้นหาด้วยคำอื่น หรือเลือกหมวดหมู่อื่นดูนะ': ['Try another keyword or category', '试试其他关键词或分类'],
+  'ยังเชื่อมต่อระบบโทรไม่ได้ ลองใหม่อีกครั้ง': ['Cannot connect the call. Please try again.', '无法接通通话，请重试。'],
+  'ยังไม่ได้เลือกพิกัด — กรุณาปักหมุดจุดจัดส่ง': ['No location selected — please drop a pin', '尚未选择位置 — 请在地图上标记送达点'],
+  'ติดต่อร้านค้าหรือฝ่ายบริการลูกค้า': ['Please contact the shop or customer service', '请联系商家或客服'],
+  'กรุณาแนบสลิปการโอนพร้อมเพย์ก่อนสั่งซื้อ': ['Please attach your PromptPay transfer slip first', '请先上传 PromptPay 转账凭证'],
+  'ส่งฟรีออเดอร์แรก เมื่อสั่งขั้นต่ำ 99 บาท': ['Free delivery on your first order over 99 THB', '首单满 99 泰铢免运费'],
+  'QR นี้ใส่ยอดเงินให้แล้ว สแกนแล้วกดโอนได้เลย': ['The amount is already in this QR — just scan and pay', '此二维码已包含金额，扫码即可付款'],
+  'ใช้โค้ดได้เฉพาะโหมดเชื่อมฐานข้อมูลจริง': ['Codes only work when connected to the real database', '仅在连接真实数据库时可使用优惠码'],
+  'อัปโหลดสลิปไม่สำเร็จ ลองใหม่อีกครั้ง': ['Slip upload failed, please try again', '凭证上传失败，请重试'],
+  'เมื่อคุณสั่งอาหาร ประวัติจะแสดงที่นี่': ['Your orders will appear here', '您的订单会显示在这里'],
+  'เลือกเมนูอร่อยๆ แล้วกลับมาสั่งกันเลย!': ['Pick something tasty and come back to order!', '挑选美食后回来下单吧！'],
+  'สั่งซื้อไม่สำเร็จ ลองใหม่อีกครั้ง': ['Order failed, please try again', '下单失败，请重试'],
+  'กรุณาปักหมุดตำแหน่งจัดส่งบนแผนที่': ['Please drop a delivery pin on the map', '请在地图上标记送达位置'],
+  'โอนผ่านพร้อมเพย์ (สแกน QR ของร้าน)': ['PromptPay transfer (scan the shop QR)', 'PromptPay 转账（扫描商家二维码）'],
+  'ร้านนี้ยังไม่ได้ตั้งค่าพร้อมเพย์': ['This shop has not set up PromptPay', '该店铺尚未设置 PromptPay'],
+  'โอนแล้วกรุณาแนบสลิปเพื่อให้ร้านตรวจสอบ': ['After paying, attach the slip for the shop to verify', '付款后请上传凭证供商家核对'],
+  'แตะแผนที่หรือลากหมุดเพื่อเลือกจุดส่ง': ['Tap the map or drag the pin', '点击地图或拖动图钉选择送达点'],
+  'บ้านเลขที่ ถนน แขวง เขต จังหวัด': ['House no., street, district, province', '门牌号、街道、区、府'],
+  'ระบบจะอัปเดตสถานะให้อัตโนมัติ': ['Status updates automatically', '状态将自动更新'],
+  'โหมดตัวอย่าง (ยังไม่เชื่อมฐานข้อมูล)': ['Sample mode (database not connected)', '示例模式（未连接数据库）'],
+  'ร้านค้าได้รับออเดอร์ของคุณแล้ว': ['The shop has received your order', '商家已收到您的订单'],
+  'กำลังหาไรเดอร์ให้คุณ': ['Finding a rider for you', '正在为您寻找骑手'],
+  'สั่งซื้อสำเร็จ!': ['Order placed!', '下单成功！'],
+  'ขออภัย ตำแหน่งนี้ห่างจากร้าน': ['Sorry, this location is', '抱歉，该位置距离店铺'],
+  'ตำแหน่งนี้เกินเขตจัดส่ง': ['This location is outside the delivery area', '该位置超出配送范围'],
+  'เกินเขตจัดส่ง (ไม่เกิน': ['outside delivery area (max', '超出配送范围（最多'],
+  'อยู่ในเขตจัดส่ง': ['within delivery area', '在配送范围内'],
+  'เกินเขตจัดส่ง': ['outside delivery area', '超出配送范围'],
+  'ร้านนี้จัดส่งในรัศมี': ['This shop delivers within', '本店配送半径'],
+  '(วงสีส้มบนแผนที่)': ['(orange circle on map)', '（地图上的橙色圆圈）'],
+  'ห่างจากร้าน': ['from shop:', '距店铺'],
+  'จากร้าน': ['from the shop', '（距店铺）'],
+  'พิกัดที่เลือก': ['Selected location', '已选位置'],
+  'ใช้ตำแหน่งปัจจุบันของฉัน': ['Use my current location', '使用我的当前位置'],
+  'ใช้ตำแหน่งปัจจุบันแล้ว': ['Using your current location', '已使用当前位置'],
+  'พิกัดจัดส่ง': ['Delivery location', '送达位置'],
+  '(แตะบนแผนที่เพื่อปักหมุด)': ['(tap the map to drop a pin)', '（点击地图标记）'],
+  'ที่อยู่จัดส่งโดยละเอียด': ['Full delivery address', '详细送货地址'],
+  'กรุณากรอกที่อยู่จัดส่ง': ['Please enter a delivery address', '请填写送货地址'],
+  'กรุณากรอกชื่อผู้รับ': ['Please enter the recipient name', '请填写收件人姓名'],
+  'กำลังค้นหาที่อยู่...': ['Looking up address...', '正在查找地址...'],
+  'กำลังค้นหาตำแหน่ง...': ['Finding your location...', '正在定位...'],
+  'อุปกรณ์นี้ไม่รองรับ GPS': ['This device does not support GPS', '此设备不支持 GPS'],
+  'โหลดแผนที่ไม่สำเร็จ': ['Map failed to load', '地图加载失败'],
+  'ค้นหาร้านอาหารหรือเมนู...': ['Search restaurants or dishes...', '搜索餐厅或菜品...'],
+  'หิวไหม? สั่งเลยตอนนี้': ['Hungry? Order now', '饿了吗？马上下单'],
+  'ร้านแนะนำใกล้คุณ': ['Recommended near you', '附近推荐'],
+  'ไม่พบร้านที่ค้นหา': ['No restaurants found', '未找到餐厅'],
+  'กำลังโหลดร้านอาหาร...': ['Loading restaurants...', '正在加载餐厅...'],
+  'ยังไม่เชื่อมฐานข้อมูล': ['Database not connected', '未连接数据库'],
+  'ระบบเข้าสู่ระบบยังไม่พร้อม': ['Sign-in is not ready', '登录功能尚未就绪'],
+  'ขอบคุณที่ใช้บริการอิ่มด่วน': ['Thank you for using Imduan', '感谢使用 Imduan'],
+  'อาหารพร้อมแล้ว เตรียมจัดส่ง': ['Food ready, preparing delivery', '餐品已备好，准备配送'],
+  'ร้านกำลังนำมาส่งคุณเอง': ['The shop is delivering to you', '商家正在亲自配送'],
+  'กำลังมอบหมายไรเดอร์...': ['Assigning a rider...', '正在分配骑手...'],
+  'ข้อความใหม่จากไรเดอร์': ['New message from rider', '骑手发来新消息'],
+  'ทีมจัดส่งของร้าน': ["Shop's delivery team", '商家配送团队'],
+  'ตรวจสอบโค้ดไม่สำเร็จ': ['Could not verify the code', '优惠码验证失败'],
+  'กรุณาเลือกไฟล์รูปภาพ': ['Please choose an image file', '请选择图片文件'],
+  'กลับหน้าแรก สั่งเพิ่ม': ['Back to home, order more', '返回首页继续点餐'],
+  'ส่งข้อความไม่สำเร็จ': ['Message failed to send', '消息发送失败'],
+  'สแกนจ่ายเข้าบัญชีร้าน': ['Scan to pay', '扫码付款给'],
+  'ของหวาน/เครื่องดื่ม': ['Desserts/Drinks', '甜品/饮品'],
+  'จัดส่งโดยร้านค้าเอง': ['Delivered by the shop', '商家自配送'],
+  'ร้านกำลังปรุงอาหาร': ['The shop is cooking', '商家正在制作'],
+  'ไฟล์ใหญ่เกิน 8MB': ['File is larger than 8MB', '文件超过 8MB'],
+  'มีตัวเลือกให้เลือก': ['Options available', '可选规格'],
+  'ยังไม่มีคำสั่งซื้อ': ['No orders yet', '暂无订单'],
+  'เพิ่มลงตะกร้าแล้ว': ['Added to cart', '已加入购物车'],
+  'ดำเนินการสั่งซื้อ': ['Checkout', '去结算'],
+  'ประวัติคำสั่งซื้อ': ['Order history', '订单记录'],
+  'รอร้านรับออเดอร์': ['Waiting for the shop to accept', '等待商家接单'],
+  'ส่งฟรีโดยทางร้าน': ['Free delivery by the shop', '商家免费配送'],
+  'ยืนยันคำสั่งซื้อ': ['Confirm order', '确认订单'],
+  'กรุณาเลือก 1 ข้อ': ['Choose 1', '请选择 1 项'],
+  'ออเดอร์ถูกยกเลิก': ['Order cancelled', '订单已取消'],
+  'กำลังนำส่งถึงคุณ': ['On the way to you', '正在配送中'],
+  'กำลังคำนวณเวลา...': ['Calculating time...', '正在计算时间...'],
+  'ตะกร้าว่างเปล่า': ['Your cart is empty', '购物车是空的'],
+  'เข้าสู่ระบบด้วย': ['Sign in with', '登录方式：'],
+  'ไม่พบคำสั่งซื้อ': ['Order not found', '未找到订单'],
+  'พิมพ์ข้อความ...': ['Type a message...', '输入消息...'],
+  'รอไรเดอร์รับงาน': ['Waiting for a rider', '等待骑手接单'],
+  'ไม่พบร้านค้า': ['Shop not found', '未找到店铺'],
+  'อาหารพร้อมแล้ว': ['Food is ready', '餐品已备好'],
+  'เริ่มแชทได้เลย': ['Start chatting', '开始聊天吧'],
+  'ลูกค้าอิ่มด่วน': ['Imduan customer', 'Imduan 顾客'],
+  'กำลังโทรออก...': ['Calling...', '正在呼叫...'],
+  'เลือกเมนูเพิ่ม': ['Add more items', '继续选购'],
+  'สรุปคำสั่งซื้อ': ['Order summary', '订单摘要'],
+  'จุดส่งของคุณ': ['Your drop-off point', '您的送达点'],
+  'มีสายเรียกเข้า': ['Incoming call', '来电'],
+  'เลือกได้สูงสุด': ['Choose up to', '最多可选'],
+  'ก่อนใส่ตะกร้า': ['before adding to cart', '后再加入购物车'],
+  'เลขคำสั่งซื้อ': ['Order no.', '订单号'],
+  'แชทกับไรเดอร์': ['Chat with rider', '与骑手聊天'],
+  'เงินสดปลายทาง': ['Cash on delivery', '货到付款'],
+  'พิซซ่า/พาสต้า': ['Pizza/Pasta', '披萨/意面'],
+  'โปรไฟล์ของฉัน': ['My profile', '我的资料'],
+  'กำลังคุยอยู่': ['In call', '通话中'],
+  'จัดส่งสำเร็จ': ['Delivered', '已送达'],
+  'วิธีชำระเงิน': ['Payment method', '支付方式'],
+  'ชื่อ-นามสกุล': ['Full name', '姓名'],
+  'ตะกร้าของคุณ': ['Your cart', '您的购物车'],
+  'เลือกเมนูต่อ': ['Continue shopping', '继续点餐'],
+  'ส้มตำ/อีสาน': ['Som Tam/Isan', '青木瓜沙拉/东北菜'],
+  'ชื่อผู้รับ': ['Recipient name', '收件人姓名'],
+  'ก๋วยเตี๋ยว': ['Noodles', '粿条/面'],
+  'กรุณาเลือก': ['Please choose', '请选择'],
+  'ออกจากระบบ': ['Sign out', '退出登录'],
+  'ตะกร้าจาก': ['Cart from', '购物车：'],
+  'ราคาอาหาร': ['Food price', '餐品价格'],
+  'ค่าจัดส่ง': ['Delivery fee', '配送费'],
+  'ใส่ตะกร้า': ['Add to cart', '加入购物车'],
+  'ฟาสต์ฟู้ด': ['Fast food', '快餐'],
+  'ไม่พบเมนู': ['Menu not found', '未找到菜品'],
+  'ไม่พบร้าน': ['Shop not found', '未找到店铺'],
+  'หมวดหมู่': ['Categories', '分类'],
+  'อาหารไทย': ['Thai food', '泰国菜'],
+  'เบอร์โทร': ['Phone', '电话'],
+  'ต้องระบุ': ['Required', '必选'],
+  'ทั้งหมด': ['All', '全部'],
+  'โปรไฟล์': ['Profile', '我的'],
+  'ไรเดอร์': ['Rider', '骑手'],
+  'ร้านค้า': ['Shop', '店铺'],
+  'ออเดอร์': ['Orders', '订单'],
+  'ญี่ปุ่น': ['Japanese', '日本料理'],
+  'เบเกอรี่': ['Bakery', '烘焙'],
+  'อื่นๆ': ['Others', '其他'],
+  'ทะเบียน': ['Plate', '车牌'],
+  'หน้าแรก': ['Home', '首页'],
+  'โค้ดส่วนลด': ['Discount code', '优惠码'],
+  'กรอกโค้ดส่วนลด (ถ้ามี)': ['Enter discount code (optional)', '输入优惠码（可选）'],
+  'ใช้โค้ด': ['Apply', '使用'],
+  'หมายเหตุถึงร้าน (ถ้ามี)': ['Note to shop (optional)', '给商家的备注（可选）'],
+  'เช่น ไม่ใส่ผักชี, เผ็ดน้อย': ['e.g. no coriander, less spicy', '例如：不要香菜、少辣'],
+  'สั่งซื้อเลย': ['Place order', '立即下单'],
+  'ยอดรวมทั้งหมด': ['Grand total', '总计'],
+  'ยอดรวม': ['Total', '合计'],
+  'ส่วนลด': ['Discount', '优惠'],
+  'รายการ': ['items', '件'],
+  'ส่งฟรี': ['Free delivery', '免运费'],
+  'เหตุผล': ['Reason', '原因'],
+  'ตะกร้า': ['Cart', '购物车'],
+  'รับสาย': ['Answer', '接听'],
+  'วางสาย': ['Hang up', '挂断'],
+  'ปฏิเสธ': ['Decline', '拒绝'],
+  'เปิดไมค์': ['Unmute', '打开麦克风'],
+  'ปิดไมค์': ['Mute', '关闭麦克风'],
+  'ประมาณ': ['About', '约'],
+  'คะแนน': ['Rating', '评分'],
+  'แนะนำ': ['Featured', '推荐'],
+  'ชื่อบัญชี': ['Account name', '账户名'],
+  'พร้อมเพย์': ['PromptPay', 'PromptPay'],
+  'แนบสลิปการโอน': ['Attach transfer slip', '上传转账凭证'],
+  'เปลี่ยนรูปสลิป': ['Change slip', '更换凭证'],
+  'แนบสลิปแล้ว': ['Slip attached', '已上传凭证'],
+  'กำลังโหลด...': ['Loading...', '加载中...'],
+  'ส่งไปที่': ['Deliver to', '送至'],
+  'ยังไม่ได้ตั้งที่อยู่': ['No address yet', '尚未设置地址'],
+  'นาที': ['min', '分钟'],
+  'หมด': ['Sold out', '售罄'],
+  'บาท': ['THB', '泰铢'],
+  'กม.': ['km', '公里'],
+  'ข้อ': ['', '项'],
+  'ร้าน': ['shops', '家'],
+  'ฟรี': ['Free', '免费'],
+  'ใหม่': ['New', '新'],
+  // ---- สมาชิก / OTP ----
+  'สมัครสมาชิก / เข้าสู่ระบบด้วยอีเมล': ['Sign up / Sign in with email', '使用邮箱注册 / 登录'],
+  'เราจะส่งรหัส OTP ไปที่อีเมลของคุณ ไม่ต้องตั้งรหัสผ่าน': ["We'll email you a one-time code — no password needed", '我们会向您的邮箱发送验证码，无需密码'],
+  'อีเมล': ['Email', '邮箱'],
+  'ส่งรหัส OTP': ['Send OTP code', '发送验证码'],
+  'กำลังส่ง...': ['Sending...', '发送中...'],
+  'ส่งรหัสไปที่': ['Code sent to', '验证码已发送至'],
+  'กรอกรหัสจากอีเมล': ['Enter the code from your email', '输入邮件中的验证码'],
+  'ยืนยันรหัส': ['Verify code', '验证'],
+  'กำลังตรวจสอบ...': ['Verifying...', '验证中...'],
+  'ส่งรหัสใหม่': ['Resend code', '重新发送'],
+  'ส่งใหม่ได้ใน': ['Resend in', '可重新发送：'],
+  'วินาที': ['s', '秒'],
+  'เปลี่ยนอีเมล': ['Change email', '更换邮箱'],
+  'กรุณากรอกอีเมลให้ถูกต้อง': ['Please enter a valid email', '请输入有效的邮箱'],
+  'ส่งรหัส OTP แล้ว ตรวจสอบกล่องอีเมล (รวมถึงจดหมายขยะ)': ['OTP sent — check your inbox (and spam)', '验证码已发送 — 请查看收件箱（包括垃圾邮件）'],
+  'ส่งรหัสไม่สำเร็จ': ['Could not send code', '验证码发送失败'],
+  'รหัสไม่ถูกต้องหรือหมดอายุ': ['Invalid or expired code', '验证码错误或已过期'],
+  'เข้าสู่ระบบสำเร็จ': ['Signed in', '登录成功'],
+  'หรือ': ['or', '或'],
+  'บัญชีชั่วคราว': ['Guest account', '临时账户'],
+  'สมัครสมาชิกเพื่อเก็บประวัติและสั่งจากเครื่องอื่นได้': ['Sign up to keep your history and order from any device', '注册后可保存记录并在其他设备下单'],
+  'สมาชิก': ['Member', '会员'],
+  'ข้อมูลผู้รับ (จำไว้ใช้ครั้งต่อไป)': ['Recipient details (saved for next time)', '收件人信息（下次自动填写）'],
+  'บันทึกข้อมูล': ['Save', '保存'],
+  'บันทึกข้อมูลแล้ว': ['Saved', '已保存'],
+  'บันทึกไม่สำเร็จ': ['Save failed', '保存失败'],
+  'ภาษา': ['Language', '语言'],
+  'เข้าสู่ระบบไม่สำเร็จ': ['Sign-in failed', '登录失败'],
+};
+const LANGS = { th: 'ไทย', en: 'EN', zh: '中文' };
+let currentLang = 'th';
+try { const l = localStorage.getItem('imduan_lang'); if (l && LANGS[l]) currentLang = l; } catch(e) {}
+const I18N_KEYS = Object.keys(I18N).sort((a, b) => b.length - a.length);
+const I18N_RE = new RegExp(I18N_KEYS.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+const I18N_SKIP = '[translate="no"],.rest-name,.rest-tags,.menu-group-title,.menu-item-name,.menu-desc-text,.cart-line-name,.order-card-items,.order-items,.driver-name,.detail-sub h1,.hero-slide-text,.logo,.leaflet-control-attribution,.promo-tag';
+function tr(text){
+  if (currentLang === 'th' || !text || !/[฀-๿]/.test(text)) return text;
+  const idx = currentLang === 'en' ? 0 : 1;
+  return text.replace(I18N_RE, m => I18N[m][idx]);
+}
+function translateNode(root){
+  if (currentLang === 'th' || !root) return;
+  if (root.nodeType === 3) {
+    const p = root.parentElement;
+    if (!p || p.closest('script,style,textarea,' + I18N_SKIP)) return;
+    const t = tr(root.nodeValue); if (t !== root.nodeValue) root.nodeValue = t;
+    return;
+  }
+  if (root.nodeType !== 1) return;
+  if (root.matches && root.matches('script,style,textarea') ) return;
+  if (root.closest && root.closest(I18N_SKIP)) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = []; let n; while ((n = walker.nextNode())) nodes.push(n);
+  nodes.forEach(translateNode);
+  const attrEls = root.querySelectorAll ? [root, ...root.querySelectorAll('[placeholder],[title],[alt]')] : [];
+  attrEls.forEach(el => {
+    if (!el.getAttribute || el.closest(I18N_SKIP)) return;
+    ['placeholder', 'title'].forEach(a => { const v = el.getAttribute(a); if (v) { const t = tr(v); if (t !== v) el.setAttribute(a, t); } });
+  });
+}
+const i18nObserver = new MutationObserver(muts => {
+  if (currentLang === 'th') return;
+  i18nObserver.disconnect();
+  muts.forEach(m => {
+    if (m.type === 'characterData') translateNode(m.target);
+    else m.addedNodes.forEach(translateNode);
+  });
+  i18nObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+});
+function setLang(lang){
+  if (!LANGS[lang]) return;
+  currentLang = lang;
+  try { localStorage.setItem('imduan_lang', lang); } catch(e) {}
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+  applyRestaurantNames();
+  render();
+}
+function applyRestaurantNames(){
+  RESTAURANTS.forEach(r => { if (!r.nameTh) r.nameTh = r.name; r.name = (currentLang !== 'th' && r.nameEn) ? r.nameEn : r.nameTh; });
+}
+function langSwitchHtml(){
+  return `<div class="lang-switch" translate="no">${Object.keys(LANGS).map(l => `<button class="${currentLang===l?'on':''}" onclick="setLang('${l}')">${LANGS[l]}</button>`).join('')}</div>`;
+}
+function startI18n(){
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : currentLang;
+  i18nObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+  translateNode(document.body);
+}
+
+/* ============ จดจำข้อมูลลูกค้า (ชื่อ เบอร์ ที่อยู่ หมุด) ============ */
+const PROFILE_KEY = 'imduan_profile';
+let savedPin = null;
+function loadSavedProfile(){
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+    if (!p) return;
+    if (p.name) checkoutForm.name = p.name;
+    if (p.phone) checkoutForm.phone = p.phone;
+    if (p.addr) checkoutForm.addr = p.addr;
+    if (p.lat != null && p.lng != null) { savedPin = { lat: p.lat, lng: p.lng }; checkoutGpsCoords = { ...savedPin }; }
+  } catch(e) {}
+}
+function saveProfileLocal(){
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      name: checkoutForm.name, phone: checkoutForm.phone, addr: checkoutForm.addr,
+      lat: savedPin ? savedPin.lat : null, lng: savedPin ? savedPin.lng : null,
+    }));
+  } catch(e) {}
+}
+
 /* ============ STATE ============ */
 const state = {
   view: 'home',
@@ -631,11 +942,11 @@ let promoBanners = [];
 let appLogoUrl = null;
 let checkoutDiscount = { code: null, amount: 0 };
 let checkoutGpsCoords = null; // {lat,lng} เมื่อกดปุ่ม GPS ในหน้าชำระเงิน
-let checkoutForm = { name: '', phone: '', addr: '99/1 ซอยสุขุมวิท 24 คลองตัน วัฒนา กรุงเทพฯ', note: '' };
+let checkoutForm = { name: '', phone: '', addr: '', note: '' };
 let checkoutSlip = null;          // { file, preview } สลิปโอนเงินพร้อมเพย์ที่ลูกค้าแนบ
 const promptpayCache = {};       // restaurantId -> { loading, qr, id, name }
 let checkoutMap = null, checkoutMarker = null;
-function resetCheckoutExtras(){ checkoutDiscount = { code: null, amount: 0 }; checkoutGpsCoords = null; checkoutSlip = null; checkoutPayment = 'cash'; checkoutForm.note = ''; }
+function resetCheckoutExtras(){ checkoutDiscount = { code: null, amount: 0 }; checkoutGpsCoords = savedPin ? { ...savedPin } : null; checkoutSlip = null; checkoutPayment = 'cash'; checkoutForm.note = ''; }
 
 function loadState() {
   try {
@@ -647,6 +958,7 @@ function loadState() {
     }
   } catch(e) {}
   try { const o = localStorage.getItem('imduan_orders'); if (o) state.orders = JSON.parse(o); } catch(e) {}
+  loadSavedProfile();
 }
 function saveCart() { try { localStorage.setItem('imduan_cart', JSON.stringify(state.cart)); } catch(e) {} }
 function saveOrders() { try { localStorage.setItem('imduan_orders', JSON.stringify(state.orders)); } catch(e) {} }
@@ -669,10 +981,11 @@ function mapRestaurantRow(r) {
     groups[g].push({ id: m.id, name: m.name, desc: m.description || '', price: Number(m.price), emoji: m.emoji || '🍽️', image: m.image_url || null, optionGroups });
   });
   return {
-    id: r.id, name: r.name, cat: r.category || 'other', emoji: r.emoji || '🍽️', color: r.color || '#FFEBD9',
+    id: r.id, name: r.name, nameTh: r.name, nameEn: r.name_en || null, cat: r.category || 'other', emoji: r.emoji || '🍽️', color: r.color || '#FFEBD9',
     tags: r.tags || '', rating: r.rating || 0, time: r.prep_time || '20-30 นาที', price: r.price_level || '฿฿',
     promo: r.promo || null, selfDelivery: !!r.self_delivery_enabled,
     cover: r.storefront_url || null, featured: !!r.is_featured,
+    lat: r.lat != null ? Number(r.lat) : null, lng: r.lng != null ? Number(r.lng) : null,
     menu: Object.keys(groups).map(g => ({ group: g, items: groups[g] })),
   };
 }
@@ -690,14 +1003,20 @@ async function ensureSession() {
   state.isAnonymous = true;
 }
 async function ensureCustomerRow() {
-  const { data, error } = await supabaseClient.from('customers').select('id,name,address').eq('id', state.customerId).maybeSingle();
+  const { data, error } = await supabaseClient.from('customers').select('id,name,phone,address').eq('id', state.customerId).maybeSingle();
   if (error) throw error;
   if (!data) {
-    const { error: insErr } = await supabaseClient.from('customers').insert({ id: state.customerId, name: 'ลูกค้าอิ่มด่วน' });
+    const { error: insErr } = await supabaseClient.from('customers').insert({
+      id: state.customerId, name: checkoutForm.name || 'ลูกค้าอิ่มด่วน', phone: checkoutForm.phone || null, address: checkoutForm.addr || null,
+    });
     if (insErr) throw insErr;
-  } else if (data.name) {
-    state.customerName = data.name;
+  } else {
+    // ลูกค้าเก่า: ดึงชื่อ/เบอร์/ที่อยู่ที่เคยใช้มาเติมให้อัตโนมัติ
+    if (data.name && data.name !== 'ลูกค้าอิ่มด่วน') { state.customerName = data.name; if (!checkoutForm.name) checkoutForm.name = data.name; }
+    if (data.phone && !checkoutForm.phone) checkoutForm.phone = data.phone;
+    if (data.address && !checkoutForm.addr) checkoutForm.addr = data.address;
   }
+  try { const { data: u } = await supabaseClient.auth.getUser(); state.email = u && u.user ? (u.user.email || '') : ''; } catch(e) {}
 }
 async function refreshPromoBanners() {
   try {
@@ -730,11 +1049,12 @@ async function loginWithProvider(provider) {
 }
 async function doLogout() {
   try { await supabaseClient.auth.signOut(); } catch (err) { console.warn(err); }
+  try { localStorage.removeItem(PROFILE_KEY); } catch(e) {}
   location.reload();
 }
 
 async function fetchRestaurantsRaw(withOptions){
-  const base = 'id,name,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,storefront_url,';
+  const base = 'id,name,name_en,category,emoji,color,tags,price_level,prep_time,promo,rating,is_featured,self_delivery_enabled,storefront_url,lat,lng,';
   const itemsField = withOptions
     ? 'menu_items(id,group_name,name,description,price,emoji,is_available,image_url,menu_item_option_groups(id,name,select_type,required,max_select,sort_order,menu_item_options(id,emoji,name,price_delta,is_available,sort_order)))'
     : 'menu_items(id,group_name,name,description,price,emoji,is_available,image_url)';
@@ -754,7 +1074,7 @@ async function init() {
         ({ data, error } = await fetchRestaurantsRaw(false));
         if (error) throw error;
       }
-      RESTAURANTS = (data || []).map(mapRestaurantRow);
+      RESTAURANTS = (data || []).map(mapRestaurantRow); applyRestaurantNames();
       dataSource = 'supabase';
     } catch (err) {
       console.warn('Load restaurants failed, using demo data instead:', err);
@@ -1146,7 +1466,7 @@ function confirmAddFromOptionSheet(){
   const item = computeOptionSheetItem();
   if (!item || !optionSheetTarget) return;
   const missing = optionSheetMissingRequired();
-  if (missing.length > 0) { showToast(`กรุณาเลือก "${missing[0].name}" ก่อนใส่ตะกร้า`); return; }
+  if (missing.length > 0) { showToast(`กรุณาเลือก "${missing[0].name}"`); return; }
   const selections = [];
   (item.optionGroups||[]).forEach(g => {
     const picked = optionSheetSelections[g.id] || [];
@@ -1190,7 +1510,13 @@ async function placeOrder() {
   const custName = document.getElementById('name-input') ? document.getElementById('name-input').value.trim() : '';
   const custPhone = document.getElementById('phone-input') ? document.getElementById('phone-input').value.trim() : '';
   const note = document.getElementById('note-input') ? document.getElementById('note-input').value.trim() : '';
+  if (!custName) { showToast('กรุณากรอกชื่อผู้รับ'); return; }
+  const phoneDigits = custPhone.replace(/\D/g, '');
+  if (!/^0\d{8,9}$/.test(phoneDigits)) { showToast('กรุณากรอกเบอร์โทรให้ถูกต้อง (9-10 หลัก ขึ้นต้นด้วย 0)'); return; }
   if (!addr) { showToast('กรุณากรอกที่อยู่จัดส่ง'); return; }
+  if (!checkoutGpsCoords) { showToast('กรุณาปักหมุดตำแหน่งจัดส่งบนแผนที่'); return; }
+  const dist = checkoutDistanceInfo();
+  if (!dist.ok) { showToast(`⛔ ขออภัย ตำแหน่งนี้ห่างจากร้าน ${dist.km.toFixed(1)} กม. เกินเขตจัดส่ง ${MAX_DELIVERY_KM} กม.`); return; }
   const r = findRestaurant(state.cart.restaurantId);
   if (!r) { showToast('ไม่พบร้านค้า'); return; }
   if (checkoutPayment === 'promptpay' && !checkoutSlip) { showToast('กรุณาแนบสลิปการโอนพร้อมเพย์ก่อนสั่งซื้อ'); return; }
@@ -1213,7 +1539,7 @@ async function placeOrder() {
     try {
       if (custName || custPhone) {
         await supabaseClient.from('customers').update({
-          name: custName || undefined, phone: custPhone || undefined, address: addr,
+          name: custName || undefined, phone: phoneDigits || undefined, address: addr,
         }).eq('id', state.customerId);
       }
       let slipPath = null;
@@ -1249,6 +1575,8 @@ async function placeOrder() {
       };
       state.orders.unshift(order);
       state.activeOrder = order;
+      savedPin = checkoutGpsCoords ? { ...checkoutGpsCoords } : savedPin;
+      checkoutForm.name = custName; checkoutForm.phone = phoneDigits; checkoutForm.addr = addr; saveProfileLocal();
       clearCart(); resetCheckoutExtras(); activeSheet = null;
       setView('tracking');
       subscribeToOrder(order.id);
@@ -1268,6 +1596,8 @@ async function placeOrder() {
     state.orders.unshift(order);
     state.activeOrder = order;
     saveOrders();
+    savedPin = checkoutGpsCoords ? { ...checkoutGpsCoords } : savedPin;
+    checkoutForm.name = custName; checkoutForm.phone = phoneDigits; checkoutForm.addr = addr; saveProfileLocal();
     clearCart(); resetCheckoutExtras(); activeSheet = null;
     setView('tracking');
     if (dataSource === 'supabase' && !state.customerId) {
@@ -1398,7 +1728,8 @@ function topbar() {
   return `
   <div class="topbar">
     <div class="logo">${logoHtml}<div class="logo-text"></div></div>
-    <div class="addr-pill">📍 ส่งไปที่ บ้าน • สุขุมวิท</div>
+    <div class="addr-pill" onclick="openProfileSheet()" style="cursor:pointer;">📍 ${checkoutForm.addr ? `<span translate="no">${escHtml(checkoutForm.addr.split(/[,\n]/)[0].slice(0, 28))}</span>` : 'ยังไม่ได้ตั้งที่อยู่'}</div>
+    ${langSwitchHtml()}
     <button class="icon-btn" onclick="goToOrders()">🧾</button>
     <button class="icon-btn" onclick="openCartSheet()">🛒${cartCount()>0?`<span class="cart-badge">${cartCount()}</span>`:''}</button>
   </div>`;
@@ -1443,6 +1774,32 @@ function renderHome() {
   <div style="height:100px"></div>
   `;
 }
+// โปรโมชั่น: กดแล้วเข้าร้านที่ผูกไว้ (promo_banners.restaurant_id) / ถ้าไม่ได้ผูก จะหาชื่อร้านในหัวข้อโปร / หรือเปิดลิงก์
+function promoTarget(b){
+  if (!b) return null;
+  if (b.restaurant_id && findRestaurant(b.restaurant_id)) return { type: 'shop', id: b.restaurant_id };
+  if (b.link_url) {
+    const m = String(b.link_url).match(/(?:[?#&]r=|restaurant[\/=])([0-9a-f-]{36})/i) || String(b.link_url).match(/^([0-9a-f-]{36})$/i);
+    if (m && findRestaurant(m[1])) return { type: 'shop', id: m[1] };
+  }
+  const title = (b.title || '').replace(/\s+/g, '');
+  if (title) {
+    const hit = RESTAURANTS.slice().sort((x, y) => (y.nameTh||y.name).length - (x.nameTh||x.name).length).find(r => {
+      const full = (r.nameTh || r.name).replace(/\s+/g, '');
+      const short = (r.nameTh || r.name).split(/[-–—(]/)[0].replace(/\s+/g, '');
+      return title.includes(full) || (short.length >= 3 && title.includes(short));
+    });
+    if (hit) return { type: 'shop', id: hit.id };
+  }
+  if (b.link_url) return { type: 'url', url: b.link_url };
+  return null;
+}
+function openPromo(i){
+  const t = promoTarget(promoBanners[i]);
+  if (!t) return;
+  if (t.type === 'shop') openRestaurant(t.id);
+  else if (/^https?:\/\//i.test(t.url)) window.open(t.url, '_blank', 'noopener');
+}
 let currentSlide = 0;
 let slideTimer = null;
 function promoCarouselHtml() {
@@ -1451,7 +1808,7 @@ function promoCarouselHtml() {
   <div class="hero-carousel">
     <div class="hero-carousel-track">
       ${promoBanners.map((b,i) => `
-        <button class="hero-slide ${i===currentSlide?'on':''}" onclick="${b.link_url ? `window.open('${b.link_url}','_blank')` : ''}">
+        <button class="hero-slide ${i===currentSlide?'on':''} ${promoTarget(b) ? 'clickable' : ''}" onclick="openPromo(${i})">
           <img src="${b.image_url}" alt="${b.title||''}" onerror="this.style.display='none'">
           ${b.title ? `<div class="hero-slide-scrim"><div class="hero-slide-text"><h2>${b.title}</h2></div></div>` : ''}
         </button>`).join('')}
@@ -1519,7 +1876,7 @@ function renderDetail() {
         <div class="menu-item-emoji" style="${item.image ? `background-image:url('${item.image}');background-size:cover;background-position:center;` : `background:${r.color}`}">${item.image ? '' : item.emoji}</div>
         <div class="menu-item-info">
           <div class="menu-item-name">${item.name}</div>
-          <div class="menu-item-desc">${item.desc}${hasOpts ? ' · มีตัวเลือกให้เลือก' : ''}</div>
+          <div class="menu-item-desc"><span class="menu-desc-text">${item.desc}</span>${hasOpts ? ' · มีตัวเลือกให้เลือก' : ''}</div>
           <div class="menu-item-price">${money(item.price)}</div>
         </div>
         <div class="qty-ctrl">
@@ -1536,7 +1893,7 @@ function renderDetail() {
   </div>
   <div class="detail-sub">
     <h1 style="font-size:20px">${r.name}</h1>
-    <div class="detail-meta"><span>⭐ <b>${r.rating}</b></span><span>🕐 <b>${r.time}</b></span><span><b>${r.price}</b></span><span>${r.tags}</span></div>
+    <div class="detail-meta"><span>⭐ <b>${r.rating}</b></span><span>🕐 <b>${r.time}</b></span><span><b>${r.price}</b></span><span translate="no">${r.tags}</span></div>
   </div>
   ${menuHtml}
   <div style="height:110px"></div>
@@ -1579,7 +1936,7 @@ function cartSheetHtml() {
   return `
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title"><h2>ตะกร้าจาก ${r.name}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="sheet-title"><h2>ตะกร้าจาก <span translate="no">${r.name}</span></h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
     ${r.selfDelivery ? `<div class="promo-tag" style="margin-bottom:10px;display:inline-block;">🎉 ส่งฟรีโดยทางร้าน</div>` : ''}
     ${lines}
     <div class="summary-row"><span>ราคาอาหาร</span><span>${money(subtotal)}</span></div>
@@ -1607,14 +1964,14 @@ function itemOptionsSheetHtml(){
       return `
       <div class="pay-option ${isPicked?'selected':''}" style="${disabled ? 'opacity:.45;' : ''}" ${onClick}>
         <div class="dot" style="${g.selectType==='multi' ? 'border-radius:5px;' : ''}"></div>
-        <span style="flex:1;">${o.emoji ? o.emoji+' ' : ''}${o.name}</span>
+        <span style="flex:1;" translate="no">${o.emoji ? o.emoji+' ' : ''}${o.name}</span>
         <span style="font-weight:700;color:${disabled ? 'var(--text-muted)' : 'inherit'};">${disabled ? 'หมด' : (o.priceDelta>0 ? '+'+money(o.priceDelta) : money(0))}</span>
       </div>`;
     }).join('');
     return `
     <div style="margin-top:12px;">
       <div style="display:flex;align-items:center;gap:8px;padding:0 20px;">
-        <b style="font-size:14px;">${g.name}</b>
+        <b style="font-size:14px;" translate="no">${g.name}</b>
         ${g.required ? `<span style="font-size:10px;font-weight:800;background:var(--surface-2);color:var(--text-muted);border-radius:999px;padding:2px 8px;">ต้องระบุ</span>` : ''}
       </div>
       <div style="font-size:11.5px;color:var(--text-muted);padding:2px 20px 6px;">${subtitle}</div>
@@ -1624,7 +1981,7 @@ function itemOptionsSheetHtml(){
   return `
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title"><h2>${item.name}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="sheet-title"><h2 translate="no">${item.name}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
     ${item.desc ? `<div style="padding:0 20px 4px;font-size:12.5px;color:var(--text-muted);">${item.desc}</div>` : ''}
     ${groupsHtml}
     <div style="display:flex;align-items:center;gap:14px;padding:16px 20px 4px;">
@@ -1657,19 +2014,20 @@ function checkoutSheetHtml() {
     <div class="sheet-title"><h2>ยืนยันคำสั่งซื้อ</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
     ${r && r.selfDelivery ? `<div class="promo-tag" style="margin-bottom:10px;display:inline-block;">🎉 ส่งฟรีโดยทางร้าน</div>` : ''}
 
-    <div class="field-label">ชื่อผู้รับ</div>
+    <div class="field-label">ชื่อผู้รับ <span style="color:#E5484D">*</span></div>
     <input class="field-input" id="name-input" placeholder="ชื่อ-นามสกุล" value="${escAttr(checkoutForm.name)}">
 
-    <div class="field-label">เบอร์โทร</div>
-    <input class="field-input" id="phone-input" placeholder="08xxxxxxxx" inputmode="tel" value="${escAttr(checkoutForm.phone)}">
+    <div class="field-label">เบอร์โทร <span style="color:#E5484D">*</span></div>
+    <input class="field-input" id="phone-input" placeholder="08xxxxxxxx" inputmode="tel" maxlength="12" value="${escAttr(checkoutForm.phone)}">
 
-    <div class="field-label">ที่อยู่จัดส่ง</div>
-    <div style="display:flex;gap:8px;">
-      <textarea class="field-input" id="addr-input" style="flex:1;" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด...">${escHtml(checkoutForm.addr)}</textarea>
-      <button type="button" class="icon-btn" style="flex-shrink:0;height:44px;" onclick="useGpsForAddress()" title="ใช้ตำแหน่งปัจจุบัน">📍</button>
-    </div>
+    <div class="field-label">ที่อยู่จัดส่งโดยละเอียด</div>
+    <textarea class="field-input" id="addr-input" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด">${escHtml(checkoutForm.addr)}</textarea>
+
+    <div class="field-label">พิกัดจัดส่ง <span style="color:#E5484D">*</span> (แตะบนแผนที่เพื่อปักหมุด)</div>
     <div id="checkout-map" class="checkout-map"></div>
-    <div id="gps-status-label" class="map-hint">${checkoutGpsCoords ? '✅ ปักหมุดแล้ว — ลากหมุดหรือแตะแผนที่เพื่อปรับตำแหน่ง' : '📌 แตะแผนที่หรือลากหมุดเพื่อเลือกจุดส่ง หรือกด 📍 เพื่อใช้ตำแหน่งปัจจุบัน'}</div>
+    <button type="button" class="map-gps-btn" onclick="useGpsForAddress()">📍 ใช้ตำแหน่งปัจจุบันของฉัน</button>
+    <div id="gps-status-label" class="map-hint">${pinStatusText()}</div>
+    ${r && r.lat != null ? `<div class="map-hint">ร้านนี้จัดส่งในรัศมี ${MAX_DELIVERY_KM} กม. (วงสีส้มบนแผนที่)</div>` : ''}
 
     <div class="field-label">วิธีชำระเงิน</div>
     ${payOptions.map(p => `
@@ -1678,11 +2036,11 @@ function checkoutSheetHtml() {
       </div>`).join('')}
     ${checkoutPayment === 'promptpay' && ppAvailable ? `
       <div class="pp-box">
-        <div style="font-weight:800;font-size:14px;">สแกนจ่ายเข้าบัญชีร้าน ${r ? escHtml(r.name) : ''}</div>
+        <div style="font-weight:800;font-size:14px;">สแกนจ่ายเข้าบัญชีร้าน <span translate="no">${r ? escHtml(r.name) : ''}</span></div>
         <img class="pp-qr" src="${escAttr(ppQrSrc)}" alt="QR พร้อมเพย์ของร้าน" ${pp.id && pp.qr ? `onerror="this.onerror=null;this.src='${escAttr(pp.qr)}'"` : ''}>
         ${pp.id ? `<div class="pp-meta">QR นี้ใส่ยอดเงินให้แล้ว สแกนแล้วกดโอนได้เลย</div>` : ''}
         <div class="pp-amount">${money(total)}</div>
-        <div class="pp-meta">${pp.name ? 'ชื่อบัญชี: ' + escHtml(pp.name) + '<br>' : ''}${pp.id ? 'พร้อมเพย์: ' + escHtml(pp.id) : ''}</div>
+        <div class="pp-meta">${pp.name ? 'ชื่อบัญชี: <span translate="no">' + escHtml(pp.name) + '</span><br>' : ''}${pp.id ? 'พร้อมเพย์: <span translate="no">' + escHtml(pp.id) + '</span>' : ''}</div>
         <label class="slip-upload"><input type="file" accept="image/*" style="display:none" onchange="onSlipSelected(this)">📎 ${checkoutSlip ? 'เปลี่ยนรูปสลิป' : 'แนบสลิปการโอน'}</label>
         ${checkoutSlip ? `<img class="slip-preview" src="${checkoutSlip.preview}" alt="สลิป"><div class="pp-meta" style="margin-top:4px;">✅ แนบสลิปแล้ว</div>` : `<div class="pp-meta" style="margin-top:6px;">โอนแล้วกรุณาแนบสลิปเพื่อให้ร้านตรวจสอบ</div>`}
       </div>` : ''}
@@ -1697,13 +2055,13 @@ function checkoutSheetHtml() {
     <div class="field-label">หมายเหตุถึงร้าน (ถ้ามี)</div>
     <textarea class="field-input" id="note-input" placeholder="เช่น ไม่ใส่ผักชี, เผ็ดน้อย"></textarea>
 
-    <div class="summary-row" style="margin-top:10px"><span>ร้าน ${r ? r.name : ''}</span><span></span></div>
+    <div class="summary-row" style="margin-top:10px"><span>ร้านค้า: <span translate="no">${r ? r.name : ''}</span></span><span></span></div>
     <div class="summary-row"><span>ราคาอาหาร</span><span>${money(subtotal)}</span></div>
     <div class="summary-row"><span>ค่าจัดส่ง</span><span>${deliveryFee===0?'ฟรี':money(deliveryFee)}</span></div>
     ${checkoutDiscount.amount>0 ? `<div class="summary-row" style="color:var(--primary)"><span>ส่วนลด (${checkoutDiscount.code})</span><span>-${money(checkoutDiscount.amount)}</span></div>` : ''}
     <div class="summary-row total"><span>ยอดรวมทั้งหมด</span><span>${money(total)}</span></div>
 
-    <button class="btn-primary" onclick="placeOrder()">สั่งซื้อเลย • ${money(total)}</button>
+    <button class="btn-primary" id="place-order-btn" ${checkoutDistanceInfo().ok ? '' : 'disabled'} onclick="placeOrder()">สั่งซื้อเลย • ${money(total)}</button>
   </div>`;
 }
 function escHtml(v){ return String(v==null?'':v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1768,31 +2126,77 @@ function initCheckoutMap(){
   const el = document.getElementById('checkout-map');
   if (!el || typeof L === 'undefined') { if (el) el.innerHTML = '<div style="padding:60px 10px;text-align:center;font-size:12px;color:var(--text-muted);">โหลดแผนที่ไม่สำเร็จ</div>'; return; }
   if (checkoutMap) { try { checkoutMap.remove(); } catch(e) {} checkoutMap = null; }
-  const center = checkoutGpsCoords ? [checkoutGpsCoords.lat, checkoutGpsCoords.lng] : [13.7563, 100.5018];
-  checkoutMap = L.map(el, { zoomControl: true, attributionControl: false }).setView(center, checkoutGpsCoords ? 17 : 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(checkoutMap);
-  const pinIcon = L.divIcon({ className: '', html: '<div style="font-size:30px;line-height:30px;transform:translate(-3px,-14px);filter:drop-shadow(0 2px 2px rgba(0,0,0,.3));">📍</div>', iconSize: [30, 30], iconAnchor: [12, 26] });
-  checkoutMarker = L.marker(center, { draggable: true, icon: pinIcon }).addTo(checkoutMap);
-  checkoutMarker.on('dragend', () => { const p = checkoutMarker.getLatLng(); setCheckoutPin(p.lat, p.lng, true); });
+  const store = findRestaurant(state.cart.restaurantId);
+  const hasStore = store && store.lat != null && store.lng != null;
+  const center = checkoutGpsCoords ? [checkoutGpsCoords.lat, checkoutGpsCoords.lng] : (hasStore ? [store.lat, store.lng] : [13.7563, 100.5018]);
+  checkoutMap = L.map(el).setView(center, checkoutGpsCoords ? 15 : 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(checkoutMap);
+  checkoutMarker = null;
+  drawStoreOnMap();
+  if (checkoutGpsCoords) placeCheckoutMarker(checkoutGpsCoords.lat, checkoutGpsCoords.lng);
+  updatePinStatus();
   checkoutMap.on('click', (e) => setCheckoutPin(e.latlng.lat, e.latlng.lng, true));
   setTimeout(() => { if (checkoutMap) checkoutMap.invalidateSize(); }, 120);
 }
+const MAX_DELIVERY_KM = 6;
+function distanceKm(lat1, lng1, lat2, lng2){
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+// คืนค่า { km, ok } — ถ้าร้านยังไม่มีพิกัด จะคืน km = null (ตรวจระยะไม่ได้)
+function checkoutDistanceInfo(){
+  const r = findRestaurant(state.cart.restaurantId);
+  if (!checkoutGpsCoords || !r || r.lat == null || r.lng == null) return { km: null, ok: true };
+  const km = distanceKm(r.lat, r.lng, checkoutGpsCoords.lat, checkoutGpsCoords.lng);
+  return { km, ok: km <= MAX_DELIVERY_KM };
+}
+function pinStatusText(){
+  if (!checkoutGpsCoords) return 'ยังไม่ได้เลือกพิกัด — กรุณาปักหมุดจุดจัดส่ง';
+  const base = `📍 พิกัดที่เลือก: ${checkoutGpsCoords.lat.toFixed(5)}, ${checkoutGpsCoords.lng.toFixed(5)}`;
+  const d = checkoutDistanceInfo();
+  if (d.km == null) return base;
+  return d.ok
+    ? `${base}<br><span style="color:var(--green);font-weight:700;">✅ ห่างจากร้าน ${d.km.toFixed(1)} กม. — อยู่ในเขตจัดส่ง</span>`
+    : `${base}<br><span style="color:#E5484D;font-weight:700;">⛔ ห่างจากร้าน ${d.km.toFixed(1)} กม. — เกินเขตจัดส่ง (ไม่เกิน ${MAX_DELIVERY_KM} กม.)</span>`;
+}
+function updatePinStatus(extra){
+  const label = document.getElementById('gps-status-label');
+  if (label) label.innerHTML = pinStatusText() + (extra ? `<br>${extra}` : '');
+  const btn = document.getElementById('place-order-btn');
+  if (btn) btn.disabled = !checkoutDistanceInfo().ok;
+}
+function drawStoreOnMap(){
+  const r = findRestaurant(state.cart.restaurantId);
+  if (!checkoutMap || !r || r.lat == null || r.lng == null) return;
+  L.circle([r.lat, r.lng], { radius: MAX_DELIVERY_KM * 1000, color: '#FF6B00', weight: 1.5, fillColor: '#FF6B00', fillOpacity: 0.06, interactive: false }).addTo(checkoutMap);
+  L.marker([r.lat, r.lng], { interactive: false, icon: L.divIcon({ className: '', html: `<div style="font-size:22px;line-height:22px;">${r.emoji || '🏪'}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] }) }).addTo(checkoutMap);
+}
+function placeCheckoutMarker(lat, lng){
+  if (!checkoutMap) return;
+  if (!checkoutMarker) {
+    checkoutMarker = L.marker([lat, lng], { draggable: true }).addTo(checkoutMap);
+    checkoutMarker.on('dragend', () => { const p = checkoutMarker.getLatLng(); setCheckoutPin(p.lat, p.lng, true); });
+  } else checkoutMarker.setLatLng([lat, lng]);
+}
 async function setCheckoutPin(lat, lng, fillAddress){
   checkoutGpsCoords = { lat, lng };
-  if (checkoutMarker) checkoutMarker.setLatLng([lat, lng]);
-  if (checkoutMap) checkoutMap.setView([lat, lng], Math.max(checkoutMap.getZoom(), 16));
-  const label = document.getElementById('gps-status-label');
+  placeCheckoutMarker(lat, lng);
+  if (checkoutMap) checkoutMap.setView([lat, lng], Math.max(checkoutMap.getZoom(), 15));
+  updatePinStatus();
   if (!fillAddress) return;
-  if (label) label.textContent = '📡 กำลังค้นหาที่อยู่ของหมุด...';
+  if (!checkoutDistanceInfo().ok) { showToast(`⛔ ตำแหน่งนี้เกินเขตจัดส่ง ${MAX_DELIVERY_KM} กม. จากร้าน`); return; }
+  updatePinStatus('กำลังค้นหาที่อยู่...');
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=th`);
     const data = await res.json();
     const addrInput = document.getElementById('addr-input');
     if (data && data.display_name && addrInput) { addrInput.value = data.display_name; checkoutForm.addr = data.display_name; }
-    if (label) label.textContent = '✅ ปักหมุดแล้ว — ตรวจสอบ/เพิ่มบ้านเลขที่ก่อนสั่งซื้อ';
+    updatePinStatus('เติมที่อยู่ให้แล้ว ตรวจสอบบ้านเลขที่อีกครั้ง');
   } catch (err) {
     console.warn('reverse geocode failed', err);
-    if (label) label.textContent = '✅ ปักหมุดแล้ว (กรอกที่อยู่เพิ่มเติมเองได้)';
+    updatePinStatus();
   }
 }
 
@@ -1802,7 +2206,7 @@ async function useGpsForAddress(){
   if (label) label.textContent = '📡 กำลังค้นหาตำแหน่ง...';
   navigator.geolocation.getCurrentPosition(async (pos) => {
     await setCheckoutPin(pos.coords.latitude, pos.coords.longitude, true);
-    showToast('📍 ใช้ตำแหน่งปัจจุบันแล้ว');
+    if (checkoutDistanceInfo().ok) showToast('📍 ใช้ตำแหน่งปัจจุบันแล้ว');
   }, () => {
     if (label) label.textContent = '⚠️ ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตสิทธิ์ GPS';
     showToast('ไม่สามารถเข้าถึงตำแหน่งได้');
@@ -1833,42 +2237,165 @@ async function applyDiscountCode(){
 }
 
 /* ============ RENDER: PROFILE / LOGIN SHEET ============ */
-function profileSheetHtml() {
-  if (dataSource !== 'supabase') {
+let otpState = { step: 'email', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
+let otpTimer = null;
+function profileDetailsHtml(){
+  return `
+    <div class="field-label">ข้อมูลผู้รับ (จำไว้ใช้ครั้งต่อไป)</div>
+    <input class="field-input" id="pf-name" placeholder="ชื่อ-นามสกุล" value="${escAttr(checkoutForm.name)}">
+    <div style="height:8px"></div>
+    <input class="field-input" id="pf-phone" placeholder="08xxxxxxxx" inputmode="tel" maxlength="12" value="${escAttr(checkoutForm.phone)}">
+    <div style="height:8px"></div>
+    <textarea class="field-input" id="pf-addr" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด">${escHtml(checkoutForm.addr)}</textarea>
+    <button class="btn-secondary" onclick="saveProfileDetails()">บันทึกข้อมูล</button>`;
+}
+function otpBlockHtml(){
+  const left = Math.max(0, Math.ceil((otpState.cooldownUntil - Date.now()) / 1000));
+  if (otpState.step === 'code') {
     return `
-    <div class="sheet">
-      <div class="sheet-handle"></div>
-      <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="profile-card">
+      <div class="pc-title">📩 กรอกรหัสจากอีเมล</div>
+      <div class="pc-sub">ส่งรหัสไปที่ <b translate="no">${escHtml(otpState.email)}</b></div>
+    </div>
+    <input class="field-input otp-input" id="otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="••••••" style="margin-top:12px;" oninput="this.value=this.value.replace(/\\D/g,''); if(this.value.length>=6 && this.value.length===this.maxLength) verifyEmailOtp();">
+    <button class="btn-primary" id="otp-verify-btn" ${otpState.verifying ? 'disabled' : ''} onclick="verifyEmailOtp()">${otpState.verifying ? 'กำลังตรวจสอบ...' : 'ยืนยันรหัส'}</button>
+    <div style="display:flex;justify-content:space-between;padding:0 20px;">
+      <button class="link-btn" id="otp-resend-btn" ${left > 0 || otpState.sending ? 'disabled' : ''} onclick="sendEmailOtp(true)">${left > 0 ? `ส่งใหม่ได้ใน ${left} วินาที` : 'ส่งรหัสใหม่'}</button>
+      <button class="link-btn" onclick="otpState.step='email'; openSheet('profile')">เปลี่ยนอีเมล</button>
+    </div>`;
+  }
+  return `
+    <div class="profile-card">
+      <div class="pc-title">✉️ สมัครสมาชิก / เข้าสู่ระบบด้วยอีเมล</div>
+      <div class="pc-sub">เราจะส่งรหัส OTP ไปที่อีเมลของคุณ ไม่ต้องตั้งรหัสผ่าน</div>
+    </div>
+    <div class="field-label">อีเมล</div>
+    <input class="field-input" id="otp-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${escAttr(otpState.email)}" onkeydown="if(event.key==='Enter') sendEmailOtp()">
+    <button class="btn-primary" ${otpState.sending ? 'disabled' : ''} onclick="sendEmailOtp()">${otpState.sending ? 'กำลังส่ง...' : 'ส่งรหัส OTP'}</button>`;
+}
+function profileSheetHtml() {
+  const head = `
+    <div class="sheet-handle"></div>
+    <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px 4px;">
+      <span style="font-size:12.5px;font-weight:700;color:var(--text-muted);">🌐 ภาษา</span>${langSwitchHtml()}
+    </div>`;
+  if (dataSource !== 'supabase') {
+    return `<div class="sheet">${head}
+      ${profileDetailsHtml()}
       <div class="empty-state"><div class="e">🔌</div><h3>ยังไม่เชื่อมฐานข้อมูล</h3><p>ระบบเข้าสู่ระบบจะใช้ได้เมื่อเชื่อม Supabase แล้ว</p></div>
     </div>`;
   }
   if (!state.customerId) {
-    return `
-    <div class="sheet">
-      <div class="sheet-handle"></div>
-      <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    return `<div class="sheet">${head}
+      ${profileDetailsHtml()}
       <div class="empty-state"><div class="e">🔐</div><h3>ระบบเข้าสู่ระบบยังไม่พร้อม</h3><p>ต้องเปิด "Allow anonymous sign-ins" ใน Supabase Dashboard &gt; Authentication &gt; Providers ก่อน แล้วรีเฟรชหน้านี้ใหม่ (ยังสั่งอาหารแบบไม่ล็อกอินได้ตามปกติ)</p></div>
     </div>`;
   }
-  return `
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
-    <div style="padding:0 20px;">
-      <p style="font-size:13px;color:var(--text-muted);line-height:1.6;">
-        ${state.isAnonymous
-          ? 'ตอนนี้คุณสั่งอาหารแบบบัญชีชั่วคราว (ยังไม่ได้ล็อกอิน) — เข้าสู่ระบบเพื่อเก็บประวัติการสั่งซื้อไว้ถาวรและสั่งจากเครื่องอื่นได้'
-          : '✅ เข้าสู่ระบบแล้ว ประวัติการสั่งซื้อของคุณถูกเก็บไว้ถาวร'}
-      </p>
-      ${state.isAnonymous ? `
-        <button class="btn-primary" onclick="loginWithProvider('google')">เข้าสู่ระบบด้วย Google</button>
-        <button class="btn-secondary" onclick="loginWithProvider('facebook')">เข้าสู่ระบบด้วย Facebook</button>
-      ` : `
-        <button class="btn-secondary" onclick="doLogout()">ออกจากระบบ</button>
-      `}
+  if (!state.isAnonymous) {
+    return `<div class="sheet">${head}
+      <div class="profile-card">
+        <div class="pc-title">✅ สมาชิก</div>
+        <div class="pc-sub"><span translate="no">${escHtml(state.email || '')}</span><br>เข้าสู่ระบบแล้ว ประวัติการสั่งซื้อของคุณถูกเก็บไว้ถาวร</div>
+      </div>
+      ${profileDetailsHtml()}
+      <button class="btn-secondary" onclick="doLogout()">ออกจากระบบ</button>
+      <div style="height:10px"></div>
+    </div>`;
+  }
+  return `<div class="sheet">${head}
+    ${otpBlockHtml()}
+    <div class="or-sep">หรือ</div>
+    <button class="btn-secondary" onclick="loginWithProvider('google')">เข้าสู่ระบบด้วย Google</button>
+    <div class="profile-card" style="margin-top:18px;">
+      <div class="pc-title">👤 บัญชีชั่วคราว</div>
+      <div class="pc-sub">สมัครสมาชิกเพื่อเก็บประวัติและสั่งจากเครื่องอื่นได้</div>
     </div>
+    ${profileDetailsHtml()}
     <div style="height:10px"></div>
   </div>`;
+}
+function startOtpCooldown(){
+  otpState.cooldownUntil = Date.now() + 60000;
+  clearInterval(otpTimer);
+  otpTimer = setInterval(() => {
+    const btn = document.getElementById('otp-resend-btn');
+    const left = Math.max(0, Math.ceil((otpState.cooldownUntil - Date.now()) / 1000));
+    if (btn) { btn.disabled = left > 0; btn.textContent = tr(left > 0 ? `ส่งใหม่ได้ใน ${left} วินาที` : 'ส่งรหัสใหม่'); }
+    if (left <= 0) clearInterval(otpTimer);
+  }, 1000);
+}
+async function sendEmailOtp(isResend){
+  const input = document.getElementById('otp-email');
+  const email = (isResend ? otpState.email : (input ? input.value : '')).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { showToast('กรุณากรอกอีเมลให้ถูกต้อง'); return; }
+  otpState.email = email; otpState.sending = true; openSheet('profile');
+  try {
+    // เก็บ "ตั๋ว" ของบัญชีชั่วคราวไว้ก่อน เพื่อย้ายประวัติการสั่งซื้อเดิมไปบัญชีสมาชิกหลังยืนยัน OTP
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session && session.user.is_anonymous && !isResend) {
+      try {
+        const { data: tok, error: tokErr } = await supabaseClient.rpc('create_guest_claim');
+        if (!tokErr && tok) { try { localStorage.setItem('imduan_guest_claim', tok); } catch(e) {} }
+      } catch(e) { console.warn('create_guest_claim unavailable', e); }
+    }
+    const { error } = await supabaseClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    if (error) throw error;
+    const mode = 'email';
+    otpState.mode = mode; otpState.step = 'code';
+    showToast('ส่งรหัส OTP แล้ว ตรวจสอบกล่องอีเมล (รวมถึงจดหมายขยะ)');
+    startOtpCooldown();
+  } catch (err) {
+    console.error(err);
+    showToast('ส่งรหัสไม่สำเร็จ: ' + (err.message || ''));
+  }
+  otpState.sending = false; openSheet('profile');
+  setTimeout(() => { const c = document.getElementById('otp-code'); if (c) c.focus(); }, 80);
+}
+async function verifyEmailOtp(){
+  const input = document.getElementById('otp-code');
+  const token = input ? input.value.trim() : '';
+  if (token.length < 6 || otpState.verifying) return;
+  otpState.verifying = true;
+  const btn = document.getElementById('otp-verify-btn'); if (btn) { btn.disabled = true; btn.textContent = tr('กำลังตรวจสอบ...'); }
+  try {
+    const { data, error } = await supabaseClient.auth.verifyOtp({ email: otpState.email, token, type: otpState.mode });
+    if (error) throw error;
+    const user = data.user || (data.session && data.session.user);
+    if (user) { state.customerId = user.id; state.isAnonymous = !!user.is_anonymous; state.email = user.email || otpState.email; }
+    try {
+      const tok = localStorage.getItem('imduan_guest_claim');
+      if (tok) { await supabaseClient.rpc('claim_guest_data', { p_token: tok }); localStorage.removeItem('imduan_guest_claim'); }
+    } catch(e) { console.warn('claim_guest_data unavailable', e); }
+    try { await ensureCustomerRow(); } catch(e) { console.warn(e); }
+    try { await persistCustomerDetails(); } catch(e) { console.warn(e); }
+    otpState = { step: 'email', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
+    showToast('✅ เข้าสู่ระบบสำเร็จ');
+    try { await refreshMyOrders(); } catch(e) {}
+    openSheet('profile');
+  } catch (err) {
+    console.error(err);
+    otpState.verifying = false;
+    showToast('รหัสไม่ถูกต้องหรือหมดอายุ');
+    openSheet('profile');
+  }
+}
+async function persistCustomerDetails(){
+  saveProfileLocal();
+  if (dataSource !== 'supabase' || !supabaseClient || !state.customerId) return;
+  const patch = { address: checkoutForm.addr || null };
+  if (checkoutForm.name) patch.name = checkoutForm.name;
+  if (checkoutForm.phone) patch.phone = checkoutForm.phone;
+  const { error } = await supabaseClient.from('customers').update(patch).eq('id', state.customerId);
+  if (error) throw error;
+}
+async function saveProfileDetails(){
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const name = g('pf-name').trim(), phone = g('pf-phone').replace(/\D/g, ''), addr = g('pf-addr').trim();
+  if (phone && !/^0\d{8,9}$/.test(phone)) { showToast('กรุณากรอกเบอร์โทรให้ถูกต้อง (9-10 หลัก ขึ้นต้นด้วย 0)'); return; }
+  checkoutForm.name = name; checkoutForm.phone = phone; checkoutForm.addr = addr;
+  try { await persistCustomerDetails(); showToast('✅ บันทึกข้อมูลแล้ว'); render(); }
+  catch (e) { console.error(e); showToast('บันทึกไม่สำเร็จ'); }
 }
 
 /* ============ RENDER: TRACKING WITH LIVE MAP ============ */
@@ -1921,9 +2448,9 @@ function renderTracking() {
 
     <div class="section-title" style="padding:0;margin-top:16px;"><h2>สรุปคำสั่งซื้อ</h2></div>
     <div class="order-card" style="margin-top:8px">
-      <div class="order-card-top"><span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span></div>
+      <div class="order-card-top"><span style="font-weight:700" translate="no">${o.restaurantEmoji} ${o.restaurantName}</span></div>
       <div class="order-card-items">${o.items.map(orderItemLineText).join(', ')}</div>
-      <div class="order-card-bottom"><span>ส่งไปที่ ${o.address}</span></div>
+      <div class="order-card-bottom"><span>ส่งไปที่ <span translate="no">${o.address}</span></span></div>
       ${o.discountAmount>0 ? `<div class="order-card-bottom"><span style="color:var(--primary)">ส่วนลด (${o.discountCode})</span><span style="color:var(--primary)">-${money(o.discountAmount)}</span></div>` : ''}
       <div class="order-card-bottom"><b>รวม ${money(o.total)}</b></div>
     </div>
@@ -1962,7 +2489,7 @@ function renderOrders() {
       return `
       <div class="order-card" onclick="openOrderTracking('${o.id}')">
         <div class="order-card-top">
-          <span style="font-weight:700">${o.restaurantEmoji} ${o.restaurantName}</span>
+          <span style="font-weight:700" translate="no">${o.restaurantEmoji} ${o.restaurantName}</span>
           <span class="order-status-tag ${done?'':'pending'}">${info.label}</span>
         </div>
         <div class="order-card-items">${o.items.map(orderItemLineText).join(', ')}</div>
@@ -2017,7 +2544,7 @@ function render() {
   if ((state.view === 'home' || state.view === 'detail') && cartCount() > 0 && !activeSheet) {
     const r = findRestaurant(state.cart.restaurantId);
     fab = `<button class="cart-fab" onclick="openCartSheet()">
-      <span>🛒 ${cartCount()} รายการ · ${r ? r.name : ''}</span>
+      <span>🛒 ${cartCount()} รายการ · <span translate="no">${r ? r.name : ''}</span></span>
       <span>${money(cartSubtotal())} ›</span>
     </button>`;
   }
@@ -2050,6 +2577,7 @@ function render() {
 }
 
 /* ============ INIT ============ */
+startI18n();
 init();
 </script>
 </body>
