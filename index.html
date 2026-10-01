@@ -374,6 +374,13 @@
   .or-sep { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px; margin: 16px 20px 0; }
   .or-sep::before, .or-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
   .hero-slide.clickable { cursor: pointer; }
+  .en-warn { display: none; color: #E5484D; font-size: 12px; font-weight: 700; padding: 6px 20px 0; }
+  .field-hint { font-size: 11.5px; color: var(--text-muted); padding: 4px 20px 0; }
+  .input-bad { border-color: #E5484D !important; background: #FFF1F1 !important; }
+  .social-btn { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .social-ic { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; color: #fff; font-family: Arial, sans-serif; }
+  .social-ic.g { background: #fff; color: #4285F4; border: 1px solid #E3E3E3; }
+  .social-ic.f { background: #1877F2; }
 
   /* ---------- empty states ---------- */
   .empty-state { text-align: center; padding: 60px 30px; color: var(--text-muted); }
@@ -836,6 +843,41 @@ const I18N = {
   'บัญชีชั่วคราว': ['Guest account', '临时账户'],
   'สมัครสมาชิกเพื่อเก็บประวัติและสั่งจากเครื่องอื่นได้': ['Sign up to keep your history and order from any device', '注册后可保存记录并在其他设备下单'],
   'สมาชิก': ['Member', '会员'],
+  'สมัครสมาชิก': ['Sign up', '注册'],
+  'สมัครสมาชิกเพื่อเก็บประวัติการสั่งซื้อ และไม่ต้องกรอกชื่อ-เบอร์ทุกครั้ง': ['Sign up to keep your order history and skip typing your name and phone every time', '注册会员可保存订单记录，无需每次填写姓名和电话'],
+  'เข้าสู่ระบบ (สมาชิกเก่า)': ['Sign in (existing member)', '登录（老会员）'],
+  'ยังไม่เป็นสมาชิก? สมัคร': ['Not a member? Sign up', '还不是会员？注册'],
+  'เป็นสมาชิกแล้ว? เข้าสู่ระบบ': ['Already a member? Sign in', '已是会员？登录'],
+  'ย้อนกลับ': ['Back', '返回'],
+  'ใช้ได้เฉพาะภาษาอังกฤษ (a-z, 0-9) เท่านั้น': ['English only (a-z, 0-9)', '仅限英文（a-z, 0-9）'],
+  'สร้างไอดี (ภาษาอังกฤษ)': ['Create username (English)', '创建用户名（英文）'],
+  'รหัสผ่าน (ภาษาอังกฤษ)': ['Password (English)', '密码（英文）'],
+  'a-z, 0-9 หรือ _ จำนวน 4-20 ตัว': ['a-z, 0-9 or _, 4-20 characters', 'a-z、0-9 或 _，4-20 个字符'],
+  'เช่น somchai01': ['e.g. somchai01', '例如 somchai01'],
+  'อย่างน้อย 6 ตัว': ['At least 6 characters', '至少 6 个字符'],
+  'ไอดี หรือ อีเมล': ['Username or email', '用户名或邮箱'],
+  'รหัสผ่าน': ['Password', '密码'],
+  'ลืมรหัสผ่าน?': ['Forgot password?', '忘记密码？'],
+  'กรุณากรอกไอดีและรหัสผ่าน': ['Please enter your username and password', '请输入用户名和密码'],
+  'ไอดีหรือรหัสผ่านไม่ถูกต้อง': ['Incorrect username or password', '用户名或密码错误'],
+  'กรุณาสร้างไอดี': ['Please create a username', '请创建用户名'],
+  'ไอดีใช้ได้เฉพาะภาษาอังกฤษ a-z, 0-9 หรือ _ เท่านั้น': ['Username must be English letters, numbers or _ only', '用户名只能使用英文字母、数字或 _'],
+  'ไอดีต้องมี 4-20 ตัวอักษร': ['Username must be 4-20 characters', '用户名需为 4-20 个字符'],
+  'กรุณาตั้งรหัสผ่าน': ['Please set a password', '请设置密码'],
+  'รหัสผ่านใช้ได้เฉพาะภาษาอังกฤษ ตัวเลข และสัญลักษณ์ (ห้ามเว้นวรรค)': ['Password must use English letters, numbers or symbols only (no spaces)', '密码只能使用英文字母、数字或符号（不能有空格）'],
+  'รหัสผ่านต้องมีอย่างน้อย 6 ตัว': ['Password must be at least 6 characters', '密码至少 6 个字符'],
+  'ไอดีนี้มีคนใช้แล้ว ลองไอดีอื่น': ['This username is taken, try another', '该用户名已被使用，请换一个'],
+  'ไอดีนี้มีคนใช้แล้ว กรุณาติดต่อร้านเพื่อเปลี่ยนไอดี': ['This username is taken, please contact us to change it', '该用户名已被使用，请联系我们更换'],
+  'ตั้งรหัสผ่านไม่สำเร็จ': ['Could not set password', '密码设置失败'],
+  'ไอดี': ['Username', '用户名'],
+  'กรอกข้อมูลให้ครบ แล้วรอรับรหัส OTP ทางอีเมล': ['Fill in your details, then get an OTP code by email', '填写信息后，通过邮箱接收验证码'],
+  'กรอกอีเมลที่สมัครไว้ แล้วรอรับรหัส OTP': ['Enter your registered email to get an OTP code', '输入注册邮箱以接收验证码'],
+  'เป็นสมาชิกอยู่แล้ว? เข้าสู่ระบบ': ['Already a member? Sign in', '已是会员？登录'],
+  'ยังไม่เป็นสมาชิก? สมัครสมาชิก': ['Not a member? Sign up', '还不是会员？注册'],
+  'กรุณากรอกชื่อ-นามสกุล': ['Please enter your full name', '请填写姓名'],
+  'สมัครสมาชิกสำเร็จ': ['Signed up successfully', '注册成功'],
+  'เข้าสู่ระบบ': ['Sign in', '登录'],
+  'กรอกอีเมล รับรหัส OTP แล้วใช้งานได้ทันที': ['Enter your email, get an OTP code and you are in', '输入邮箱，获取验证码即可使用'],
   'ข้อมูลผู้รับ (จำไว้ใช้ครั้งต่อไป)': ['Recipient details (saved for next time)', '收件人信息（下次自动填写）'],
   'บันทึกข้อมูล': ['Save', '保存'],
   'บันทึกข้อมูลแล้ว': ['Saved', '已保存'],
@@ -1752,7 +1794,7 @@ function bottomNav() {
     <button class="nav-btn ${tab==='home'?'active':''}" onclick="setView('home')"><span class="nav-ic">🏠</span>หน้าแรก</button>
     <button class="nav-btn" onclick="openCartSheet()"><span class="nav-ic">🛒</span>ตะกร้า</button>
     <button class="nav-btn ${tab==='orders'?'active':''}" onclick="goToOrders()"><span class="nav-ic">🧾</span>ออเดอร์</button>
-    <button class="nav-btn" onclick="openProfileSheet()"><span class="nav-ic">👤</span>โปรไฟล์</button>
+    <button class="nav-btn" onclick="openProfileSheet()"><span class="nav-ic">👤</span>${(dataSource === 'supabase' && state.isAnonymous) ? 'สมัครสมาชิก' : 'โปรไฟล์'}</button>
   </div>`;
 }
 
@@ -2248,7 +2290,7 @@ async function applyDiscountCode(){
 }
 
 /* ============ RENDER: PROFILE / LOGIN SHEET ============ */
-let otpState = { step: 'email', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
+let otpState = { step: 'start', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
 let otpTimer = null;
 function profileDetailsHtml(){
   return `
@@ -2260,36 +2302,137 @@ function profileDetailsHtml(){
     <textarea class="field-input" id="pf-addr" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด">${escHtml(checkoutForm.addr)}</textarea>
     <button class="btn-secondary" onclick="saveProfileDetails()">บันทึกข้อมูล</button>`;
 }
+function enHint(id){ return `<div class="en-warn" id="${id}-warn">⚠️ ใช้ได้เฉพาะภาษาอังกฤษ (a-z, 0-9) เท่านั้น</div>`; }
+function checkEnglishInput(el, kind){
+  const bad = kind === 'user' ? /[^A-Za-z0-9_]/.test(el.value) : /[^\x21-\x7E]/.test(el.value);
+  const w = document.getElementById(el.id + '-warn');
+  if (w) w.style.display = bad ? 'block' : 'none';
+  el.classList.toggle('input-bad', bad);
+  if (bad && !el._warned) { el._warned = true; showToast('⚠️ ใช้ได้เฉพาะภาษาอังกฤษ (a-z, 0-9) เท่านั้น'); }
+  if (!bad) el._warned = false;
+}
+function saveOtpForm(){
+  const v = id => { const el = document.getElementById(id); return el ? el.value : null; };
+  ['user:su-user','pass:su-pass','name:su-name','phone:su-phone','email:otp-email','loginId:li-user'].forEach(x => {
+    const [k, id] = x.split(':'); const val = v(id); if (val != null) otpState[k] = k === 'email' ? val.trim() : val;
+  });
+}
 function otpBlockHtml(){
   const left = Math.max(0, Math.ceil((otpState.cooldownUntil - Date.now()) / 1000));
+  const back = `<button class="link-btn" onclick="otpBack()">‹ ย้อนกลับ</button>`;
   if (otpState.step === 'code') {
     return `
-    <div class="profile-card">
-      <div class="pc-title">📩 กรอกรหัสจากอีเมล</div>
-      <div class="pc-sub">ส่งรหัสไปที่ <b translate="no">${escHtml(otpState.email)}</b><br>ถ้าอีเมลมีแต่ลิงก์ ให้กดลิงก์ในอีเมลบนเครื่องนี้ได้เลย</div>
-    </div>
+    <div style="padding:0 20px;font-size:12.5px;color:var(--text-muted);">ส่งรหัสไปที่ <b translate="no">${escHtml(otpState.email)}</b></div>
     <input class="field-input otp-input" id="otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="••••••" style="margin-top:12px;" oninput="this.value=this.value.replace(/\\D/g,''); if(this.value.length>=6 && this.value.length===this.maxLength) verifyEmailOtp();">
     <button class="btn-primary" id="otp-verify-btn" ${otpState.verifying ? 'disabled' : ''} onclick="verifyEmailOtp()">${otpState.verifying ? 'กำลังตรวจสอบ...' : 'ยืนยันรหัส'}</button>
     <div style="display:flex;justify-content:space-between;padding:0 20px;">
       <button class="link-btn" id="otp-resend-btn" ${left > 0 || otpState.sending ? 'disabled' : ''} onclick="sendEmailOtp(true)">${left > 0 ? `ส่งใหม่ได้ใน ${left} วินาที` : 'ส่งรหัสใหม่'}</button>
-      <button class="link-btn" onclick="otpState.step='email'; openSheet('profile')">เปลี่ยนอีเมล</button>
+      <button class="link-btn" onclick="otpState.step='email'; openSheet('profile')">‹ ย้อนกลับ</button>
     </div>`;
   }
+  if (otpState.step === 'start') {
+    return `
+    <div style="padding:4px 20px 0;font-size:13px;color:var(--text-muted);line-height:1.6;">สมัครสมาชิกเพื่อเก็บประวัติการสั่งซื้อ และไม่ต้องกรอกชื่อ-เบอร์ทุกครั้ง</div>
+    <button class="btn-primary" onclick="otpState.loginOnly=false; otpState.step='email'; openSheet('profile')">สมัครสมาชิก</button>
+    <button class="btn-secondary" onclick="otpState.step='login'; openSheet('profile')">เข้าสู่ระบบ</button>`;
+  }
+  if (otpState.step === 'login') {
+    return `
+    <div class="field-label">ไอดี หรือ อีเมล</div>
+    <input class="field-input" id="li-user" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="myname01" value="${escAttr(otpState.loginId || '')}">
+    <div class="field-label">รหัสผ่าน</div>
+    <input class="field-input" id="li-pass" type="password" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter') doPasswordLogin()">
+    <button class="btn-primary" id="li-btn" ${otpState.sending ? 'disabled' : ''} onclick="doPasswordLogin()">${otpState.sending ? 'กำลังตรวจสอบ...' : 'เข้าสู่ระบบ'}</button>
+    <div style="display:flex;justify-content:space-between;padding:0 20px;">
+      ${back}
+      <button class="link-btn" onclick="saveOtpForm(); otpState.loginOnly=true; otpState.step='email'; openSheet('profile')">ลืมรหัสผ่าน?</button>
+    </div>`;
+  }
+  const login = !!otpState.loginOnly;
+  const req = '<span style="color:#E5484D">*</span>';
   return `
-    <div class="profile-card">
-      <div class="pc-title">✉️ สมัครสมาชิก / เข้าสู่ระบบด้วยอีเมล</div>
-      <div class="pc-sub">เราจะส่งรหัส OTP ไปที่อีเมลของคุณ ไม่ต้องตั้งรหัสผ่าน</div>
-    </div>
-    <div class="field-label">อีเมล</div>
+    <div style="padding:0 20px;font-size:12.5px;color:var(--text-muted);">${login ? 'กรอกอีเมลที่สมัครไว้ แล้วรอรับรหัส OTP' : 'กรอกข้อมูลให้ครบ แล้วรอรับรหัส OTP ทางอีเมล'}</div>
+    ${login ? '' : `
+    <div class="field-label">สร้างไอดี (ภาษาอังกฤษ) ${req}</div>
+    <input class="field-input" id="su-user" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="20" placeholder="เช่น somchai01" value="${escAttr(otpState.user || '')}" oninput="checkEnglishInput(this,'user')">
+    ${enHint('su-user')}
+    <div class="field-hint">a-z, 0-9 หรือ _ จำนวน 4-20 ตัว</div>
+    <div class="field-label">รหัสผ่าน (ภาษาอังกฤษ) ${req}</div>
+    <input class="field-input" id="su-pass" type="password" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัว" value="${escAttr(otpState.pass || '')}" oninput="checkEnglishInput(this,'pass')">
+    ${enHint('su-pass')}
+    <div class="field-label">ชื่อ-นามสกุล ${req}</div>
+    <input class="field-input" id="su-name" autocomplete="name" placeholder="ชื่อ-นามสกุล" value="${escAttr(otpState.name != null ? otpState.name : checkoutForm.name)}">
+    <div class="field-label">เบอร์โทร ${req}</div>
+    <input class="field-input" id="su-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="12" placeholder="08xxxxxxxx" value="${escAttr(otpState.phone != null ? otpState.phone : checkoutForm.phone)}">`}
+    <div class="field-label">อีเมล ${req}</div>
     <input class="field-input" id="otp-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${escAttr(otpState.email)}" onkeydown="if(event.key==='Enter') sendEmailOtp()">
-    <button class="btn-primary" ${otpState.sending ? 'disabled' : ''} onclick="sendEmailOtp()">${otpState.sending ? 'กำลังส่ง...' : 'ส่งรหัส OTP'}</button>`;
+    <button class="btn-primary" ${otpState.sending ? 'disabled' : ''} onclick="sendEmailOtp()">${otpState.sending ? 'กำลังส่ง...' : 'ส่งรหัส OTP'}</button>
+    <div style="padding:0 20px;">${back}</div>`;
+}
+async function callCustomerAuth(body){
+  const { data, error } = await supabaseClient.functions.invoke('customer-auth', { body });
+  if (error) {
+    let payload = null;
+    try { payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null; } catch(e) {}
+    return { error: (payload && payload.error) || error.message || 'error' };
+  }
+  return data || {};
+}
+async function claimGuestBeforeLogin(){
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session && session.user.is_anonymous) {
+      const { data: tok, error } = await supabaseClient.rpc('create_guest_claim');
+      if (!error && tok) localStorage.setItem('imduan_guest_claim', tok);
+    }
+  } catch(e) {}
+}
+async function afterMemberLogin(user, msg){
+  if (user) { state.customerId = user.id; state.isAnonymous = !!user.is_anonymous; state.email = user.email || ''; }
+  try {
+    const tok = localStorage.getItem('imduan_guest_claim');
+    if (tok) { await supabaseClient.rpc('claim_guest_data', { p_token: tok }); localStorage.removeItem('imduan_guest_claim'); }
+  } catch(e) {}
+  try { await ensureCustomerRow(); } catch(e) { console.warn(e); }
+  otpState = { step: 'start', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
+  showToast(msg);
+  try { await refreshMyOrders(); } catch(e) {}
+  render(); openSheet('profile');
+}
+async function doPasswordLogin(){
+  saveOtpForm();
+  const id = (otpState.loginId || '').trim();
+  const pass = (document.getElementById('li-pass') || {}).value || '';
+  if (!id || !pass) { showToast('กรุณากรอกไอดีและรหัสผ่าน'); return; }
+  otpState.sending = true; openSheet('profile');
+  try {
+    await claimGuestBeforeLogin();
+    let user = null;
+    if (id.includes('@')) {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email: id.toLowerCase(), password: pass });
+      if (error) throw error;
+      user = data.user;
+    } else {
+      if (/[^A-Za-z0-9_]/.test(id)) { throw new Error('bad'); }
+      const res = await callCustomerAuth({ action: 'login', username: id, password: pass });
+      if (!res.access_token) throw new Error(res.error || 'invalid_login');
+      const { data, error } = await supabaseClient.auth.setSession({ access_token: res.access_token, refresh_token: res.refresh_token });
+      if (error) throw error;
+      user = data.user;
+    }
+    await afterMemberLogin(user, '✅ เข้าสู่ระบบสำเร็จ');
+  } catch (err) {
+    console.error(err);
+    otpState.sending = false; openSheet('profile');
+    showToast('ไอดีหรือรหัสผ่านไม่ถูกต้อง');
+  }
 }
 function profileSheetHtml() {
+  const isGuest = dataSource === 'supabase' && state.customerId && state.isAnonymous;
   const head = `
     <div class="sheet-handle"></div>
-    <div class="sheet-title"><h2>โปรไฟล์ของฉัน</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 20px 4px;">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text-muted);">🌐 ภาษา</span>${langSwitchHtml()}
+    <div class="sheet-title"><h2>${!isGuest ? 'โปรไฟล์ของฉัน' : (otpState.step === 'start' ? 'สมาชิก' : ((otpState.step === 'login' || otpState.loginOnly) ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'))}</h2>
+      <div style="display:flex;align-items:center;gap:8px;">${langSwitchHtml()}<button class="sheet-close" onclick="closeSheet()">✕</button></div>
     </div>`;
   if (dataSource !== 'supabase') {
     return `<div class="sheet">${head}
@@ -2316,16 +2459,14 @@ function profileSheetHtml() {
   }
   return `<div class="sheet">${head}
     ${otpBlockHtml()}
+    ${otpState.step !== 'start' ? '' : `
     <div class="or-sep">หรือ</div>
-    <button class="btn-secondary" onclick="loginWithProvider('google')">เข้าสู่ระบบด้วย Google</button>
-    <div class="profile-card" style="margin-top:18px;">
-      <div class="pc-title">👤 บัญชีชั่วคราว</div>
-      <div class="pc-sub">สมัครสมาชิกเพื่อเก็บประวัติและสั่งจากเครื่องอื่นได้</div>
-    </div>
-    ${profileDetailsHtml()}
-    <div style="height:10px"></div>
+    <button class="btn-secondary social-btn" onclick="loginWithProvider('google')"><span class="social-ic g">G</span>เข้าสู่ระบบด้วย Google</button>
+    <button class="btn-secondary social-btn" onclick="loginWithProvider('facebook')"><span class="social-ic f">f</span>เข้าสู่ระบบด้วย Facebook</button>`}
+    <div style="height:14px"></div>
   </div>`;
 }
+function otpBack(){ saveOtpForm(); otpState.step = 'start'; openSheet('profile'); }
 function startOtpCooldown(){
   otpState.cooldownUntil = Date.now() + 60000;
   clearInterval(otpTimer);
@@ -2339,6 +2480,25 @@ function startOtpCooldown(){
 async function sendEmailOtp(isResend){
   const input = document.getElementById('otp-email');
   const email = (isResend ? otpState.email : (input ? input.value : '')).trim().toLowerCase();
+  if (!isResend && !otpState.loginOnly) {
+    saveOtpForm();
+    const user = (otpState.user || '').trim(), pass = otpState.pass || '';
+    const name = (otpState.name || '').trim(), phone = (otpState.phone || '').replace(/\D/g, '');
+    if (!user) { showToast('กรุณาสร้างไอดี'); return; }
+    if (/[^A-Za-z0-9_]/.test(user)) { showToast('⚠️ ไอดีใช้ได้เฉพาะภาษาอังกฤษ a-z, 0-9 หรือ _ เท่านั้น'); return; }
+    if (user.length < 4) { showToast('ไอดีต้องมี 4-20 ตัวอักษร'); return; }
+    if (!pass) { showToast('กรุณาตั้งรหัสผ่าน'); return; }
+    if (/[^\x21-\x7E]/.test(pass)) { showToast('⚠️ รหัสผ่านใช้ได้เฉพาะภาษาอังกฤษ ตัวเลข และสัญลักษณ์ (ห้ามเว้นวรรค)'); return; }
+    if (pass.length < 6) { showToast('รหัสผ่านต้องมีอย่างน้อย 6 ตัว'); return; }
+    if (!name) { showToast('กรุณากรอกชื่อ-นามสกุล'); return; }
+    if (!/^0\d{8,9}$/.test(phone)) { showToast('กรุณากรอกเบอร์โทรให้ถูกต้อง (9-10 หลัก ขึ้นต้นด้วย 0)'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { showToast('กรุณากรอกอีเมลให้ถูกต้อง'); return; }
+    try {
+      const chk = await callCustomerAuth({ action: 'check', username: user });
+      if (chk && chk.available === false) { showToast('ไอดีนี้มีคนใช้แล้ว ลองไอดีอื่น'); return; }
+    } catch(e) { console.warn('username check failed', e); }
+    checkoutForm.name = name; checkoutForm.phone = phone; saveProfileLocal();
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { showToast('กรุณากรอกอีเมลให้ถูกต้อง'); return; }
   otpState.email = email; otpState.sending = true; openSheet('profile');
   try {
@@ -2380,8 +2540,18 @@ async function verifyEmailOtp(){
     } catch(e) { console.warn('claim_guest_data unavailable', e); }
     try { await ensureCustomerRow(); } catch(e) { console.warn(e); }
     try { await persistCustomerDetails(); } catch(e) { console.warn(e); }
-    otpState = { step: 'email', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
-    showToast('✅ เข้าสู่ระบบสำเร็จ');
+    const wasSignup = !otpState.loginOnly;
+    if (wasSignup && otpState.pass) {
+      const uname = (otpState.user || '').trim().toLowerCase();
+      const { error: pwErr } = await supabaseClient.auth.updateUser({ password: otpState.pass, data: { username: uname, full_name: checkoutForm.name, phone: checkoutForm.phone } });
+      if (pwErr) { console.error(pwErr); showToast('ตั้งรหัสผ่านไม่สำเร็จ: ' + (pwErr.message || '')); }
+      const { error: unErr } = await supabaseClient.from('customers').update({ username: uname, name: checkoutForm.name, phone: checkoutForm.phone }).eq('id', state.customerId);
+      if (unErr) { console.error(unErr); if (/duplicate|unique/i.test(unErr.message || '')) showToast('ไอดีนี้มีคนใช้แล้ว กรุณาติดต่อร้านเพื่อเปลี่ยนไอดี'); }
+    }
+    otpState.pass = '';
+    otpState = { step: 'start', email: '', mode: 'email', sending: false, verifying: false, cooldownUntil: 0 };
+    showToast(wasSignup ? '✅ สมัครสมาชิกสำเร็จ' : '✅ เข้าสู่ระบบสำเร็จ');
+    render();
     try { await refreshMyOrders(); } catch(e) {}
     openSheet('profile');
   } catch (err) {
