@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>แอปร้านค้า — อิ่มด่วน (Merchant Portal)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      fontFamily: { sans: ['Kanit', 'Inter', 'sans-serif'] },
+      colors: {
+        brand:  { 50:'#ecfdf5', 100:'#d1fae5', 500:'#10b981', 600:'#059669', 700:'#047857' },
+        accent: { 50:'#fff7ed', 100:'#ffedd5', 500:'#f97316', 600:'#ea580c' },
+      }
+    } }
+  }
+</script>
+<style>
+  /* ตัวแปรสีเดิมของแอป แมปเข้าโทนสีของหน้ากากใหม่ (ใช้ในฟอร์มสมัคร/ชีตเพิ่มเมนู) */
+  :root{
+    --bg:#f1f5f9; --surface:#ffffff; --surface-2:#f8fafc; --text:#1e293b; --text-muted:#64748b;
+    --primary:#10b981; --primary-ink:#ffffff; --accent:#f97316; --secondary:#f59e0b; --green:#059669; --red:#ef4444;
+    --border:#e2e8f0;
+  }
+  body{ -webkit-tap-highlight-color:transparent; }
+  @keyframes pulse-glow {
+    0%,100% { border-color:#f87171; box-shadow:0 0 0 0 rgba(239,68,68,.4); }
+    50%     { border-color:#ef4444; box-shadow:0 0 12px 4px rgba(239,68,68,.3); }
+  }
+  .order-alert-pulse{ animation:pulse-glow 1.5s infinite; }
+  .no-scrollbar::-webkit-scrollbar{ display:none; }
+  .no-scrollbar{ -ms-overflow-style:none; scrollbar-width:none; }
+
+  /* Toast */
+  .toast{ opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; }
+  .toast.show{ opacity:1; transform:translate(-50%, 4px); }
+
+  /* ฟอร์ม / การ์ด onboarding */
+  .onboard-card{ margin:28px 12px; background:#fff; border:1px solid var(--border); border-radius:18px; padding:22px; text-align:center; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .onboard-emoji{ font-size:44px; }
+  .onboard-card h2{ font-weight:700; color:var(--text); }
+  .f-label{ font-size:12px; font-weight:600; color:#334155; text-align:left; margin:14px 0 6px; }
+  .f-input, select.f-input{ width:100%; border:1px solid var(--border); background:#fff; border-radius:12px; padding:9px 12px; font-size:13px; color:var(--text); font-family:inherit; box-sizing:border-box; outline:none; }
+  .f-input:focus{ border-color:var(--primary); }
+  .btn-primary{ margin-top:16px; width:100%; background:var(--primary); color:#fff; border:none; padding:12px; border-radius:12px; font-weight:700; font-size:13.5px; box-shadow:0 4px 10px rgba(16,185,129,.25); transition:background .15s; }
+  .btn-primary:hover{ background:#059669; }
+  .btn-primary:disabled{ opacity:.6; }
+  .form-section-title{ font-size:13px; font-weight:700; color:#047857; text-align:left; margin:22px 0 4px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  .field-row{ display:flex; gap:10px; }
+  .field-row > div{ flex:1; min-width:0; }
+  .img-preview{ display:none; width:100%; max-height:140px; object-fit:cover; border-radius:12px; margin-top:8px; }
+  .pp-preview{ display:none; margin-top:10px; padding:12px; border:1.5px dashed var(--border); border-radius:12px; text-align:center; background:var(--surface-2); }
+  .pp-preview img{ width:170px; max-width:100%; background:#fff; border-radius:8px; padding:6px; margin:0 auto; }
+  .btn-outline-mini{ width:100%; background:#fff; color:#047857; border:1px solid var(--border); padding:8px; border-radius:10px; font-weight:600; font-size:12px; margin-top:8px; }
+  .btn-outline-mini:hover{ background:#ecfdf5; }
+  .btn-mini{ flex:1; border:none; padding:9px; border-radius:10px; font-weight:700; font-size:12px; }
+  .btn-mini.reject{ background:#fee2e2; color:#dc2626; }
+  .coords-label{ font-size:11.5px; color:var(--text-muted); margin-top:6px; text-align:left; }
+
+  /* แผนที่ Leaflet (กัน Tailwind preflight ไปบีบรูป tile) */
+  #profile-map{ width:100%; height:200px; border-radius:12px; margin-top:8px; border:1px solid var(--border); position:relative; overflow:hidden; z-index:0; isolation:isolate; }
+  #profile-map img{ max-width:none!important; max-height:none!important; }
+  #profile-map .leaflet-pane,#profile-map .leaflet-tile,#profile-map .leaflet-marker-icon,#profile-map .leaflet-marker-shadow,#profile-map .leaflet-tile-container,#profile-map .leaflet-zoom-box{ position:absolute; left:0; top:0; }
+  #profile-map .leaflet-tile{ width:256px; height:256px; }
+  #profile-map .leaflet-control-container .leaflet-top,#profile-map .leaflet-control-container .leaflet-bottom{ position:absolute; z-index:1000; }
+
+  /* Bottom-sheet / modal */
+  .overlay{ position:fixed; inset:0; background:rgba(15,23,42,.6); backdrop-filter:blur(4px); z-index:60; display:flex; align-items:flex-end; justify-content:center; }
+  @media (min-width:640px){ .overlay{ align-items:center; padding:16px; } }
+  .sheet{ background:#fff; width:100%; max-width:520px; max-height:88vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:18px 18px 24px; }
+  @media (min-width:640px){ .sheet{ border-radius:20px; } }
+  .sheet-title{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+  .sheet-title h2{ font-size:15px; font-weight:700; }
+  .sheet-close{ border:none; background:#f1f5f9; width:30px; height:30px; border-radius:50%; font-size:13px; color:#64748b; }
+</style>
+<style>
+  .dl-card{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);background:var(--surface);border:1.5px dashed var(--primary);border-radius:14px;padding:12px 14px;margin:14px 0 8px;text-align:left;}
+  .dl-card .dl-ic{width:42px;height:42px;border-radius:12px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+  .dl-card .dl-tx{flex:1;min-width:0;}
+  .dl-card b{display:block;font-size:14.5px;}
+  .dl-card small{color:var(--text-muted);font-size:12px;}
+  .dl-card .dl-go{font-size:13px;font-weight:800;color:var(--primary);flex-shrink:0;}
+  .dl-help{margin:0 0 4px;font-size:12.5px;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:9px 12px;text-align:left;}
+  .dl-help summary{cursor:pointer;font-weight:700;color:var(--text);}
+  .dl-help ol{margin:8px 0 2px;padding-left:20px;line-height:1.6;list-style:decimal;}
+  .dl-help b{font-weight:700;color:var(--text);}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen">
+<div id="app"></div>
+<div id="toast" class="toast fixed top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-full shadow-2xl text-xs font-medium z-[100] max-w-[90vw] text-center"></div>
+
+<script>
+/* Supabase Configuration */
+const SUPABASE_URL = 'https://onvrqsyoykopwjunvrhr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_v2MCVFaUm-1s6xD6og_eKg_S1vBU4SF';
+let supabaseClient = null;
+try {
+  if (SUPABASE_KEY.indexOf('นำ_ANON_PUBLIC_KEY') === -1 && typeof window.supabase !== 'undefined') {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (err) { console.warn('Supabase Init Error:', err); }
+
+let state = {
+  view: 'loading',   // loading | needs-config | auth | setup-profile | pending | suspended | dashboard
+  authMode: 'login',  // login | signup
+  user: null,
+  restaurant: null,
+  restaurantId: null,
+  tab: 'orders', menuFilter: 'all', menuQuery: '', stats: null,
+  newOrders: [], searchingOrders: [], preparingOrders: [], readyOrders: [], pickedUpOrders: [], menu: [],
+};
+let ordersChannel = null;
+let activeSheet = null;
+let cancelTarget = null; // { id, fromStatus }
+const CANCEL_REASON_PRESETS = ['วัตถุดิบหมด','ร้านปิดกะทันหัน/มีเหตุขัดข้อง','ออเดอร์ผิดพลาด/ราคาไม่ตรง','ลูกค้าขอยกเลิก','ที่อยู่จัดส่งอยู่นอกพื้นที่'];
+
+/* ============ ตัวเลือกเมนู (option groups) ============ */
+let editingItemId = null;      // null = กำลังเพิ่มเมนูใหม่, ไม่ null = กำลังแก้ไขเมนูเดิม
+let draftOptionGroups = [];    // [{ _key, name, selectType:'single'|'multi', required, maxSelect, options:[{_key,emoji,name,price,available}] }]
+let draftBaseFields = { name:'', group:'', price:'', emoji:'', desc:'' }; // กันข้อมูลฟิลด์หลักหาย เวลา sheet ถูกวาดใหม่ (เช่นตอนเพิ่ม/ลบกลุ่มตัวเลือก)
+let draftImageFile = null;             // เก็บไฟล์รูปที่เลือกไว้ กันหายตอน sheet ถูกวาดใหม่
+let draftImagePreviewDataUrl = null;   // เก็บ dataURL ไว้โชว์พรีวิวต่อ หลัง sheet ถูกวาดใหม่
+function newKey(){ return 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+const OPTION_GROUP_PRESETS = {
+  spice: { name: 'ระดับความเผ็ด', selectType: 'single', required: true, maxSelect: 1, options: [
+    { emoji:'🌶️🌶️🌶️', name:'เผ็ดมาก (Very Spicy)', price:0 },
+    { emoji:'🌶️🌶️', name:'เผ็ดปานกลาง (Spicy)', price:0 },
+    { emoji:'🌶️', name:'เผ็ดน้อย (A bit spicy)', price:0 },
+    { emoji:'⚪', name:'ไม่ใส่พริก (No Spicy)', price:0 },
+  ]},
+  protein: { name:'ประเภทเนื้อ/วัตถุดิบ', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'🐷', name:'หมูสับ', price:0 },
+    { emoji:'🍗', name:'ไก่สับ', price:0 },
+    { emoji:'🐄', name:'เนื้อวัว', price:10 },
+    { emoji:'🐟', name:'ปลา', price:10 },
+    { emoji:'🦐', name:'กุ้ง', price:10 },
+    { emoji:'🦑', name:'หมึก', price:10 },
+    { emoji:'🌊', name:'ทะเล', price:20 },
+    { emoji:'🌀', name:'รวมมิตร', price:20 },
+  ]},
+  egg: { name:'เพิ่มไข่', selectType:'multi', required:false, maxSelect:1, options: [
+    { emoji:'🍳', name:'ไข่ดาว', price:10 },
+    { emoji:'🍳', name:'ไข่เจียว', price:10 },
+    { emoji:'🥚', name:'ไข่ต้ม', price:10 },
+  ]},
+  /* ---- เครื่องดื่ม ---- */
+  drinkType: { name:'ร้อน / เย็น / ปั่น', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'☕', name:'ร้อน', price:0 },
+    { emoji:'🧊', name:'เย็น', price:5 },
+    { emoji:'🥤', name:'ปั่น', price:10 },
+  ]},
+  sweet: { name:'ระดับความหวาน', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'🍯', name:'หวานปกติ (100%)', price:0 },
+    { emoji:'🍯', name:'หวานน้อย (50%)', price:0 },
+    { emoji:'🍯', name:'หวานน้อยมาก (25%)', price:0 },
+    { emoji:'⚪', name:'ไม่หวาน (0%)', price:0 },
+    { emoji:'🍬', name:'หวานมาก', price:0 },
+  ]},
+  cupSize: { name:'ขนาดแก้ว', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'🥤', name:'แก้วปกติ (16 ออนซ์)', price:0 },
+    { emoji:'🥤', name:'แก้วใหญ่ (22 ออนซ์)', price:10 },
+  ]},
+  ice: { name:'น้ำแข็ง', selectType:'single', required:false, maxSelect:1, options: [
+    { emoji:'🧊', name:'น้ำแข็งปกติ', price:0 },
+    { emoji:'🧊', name:'น้ำแข็งน้อย', price:0 },
+    { emoji:'🫗', name:'แยกน้ำแข็ง', price:0 },
+    { emoji:'🚫', name:'ไม่ใส่น้ำแข็ง', price:0 },
+  ]},
+  drinkTopping: { name:'เพิ่มท็อปปิ้ง', selectType:'multi', required:false, maxSelect:3, options: [
+    { emoji:'⚫', name:'ไข่มุก', price:10 },
+    { emoji:'🟫', name:'บุกบราวน์ชูการ์', price:10 },
+    { emoji:'🟩', name:'เยลลี่', price:10 },
+    { emoji:'🍦', name:'วิปครีม', price:10 },
+    { emoji:'☕', name:'เพิ่มช็อตกาแฟ', price:15 },
+  ]},
+  spoon: { name:'ช้อนส้อมพลาสติก', selectType:'single', required:true, maxSelect:1, options: [
+    { emoji:'✅', name:'รับ', price:0 },
+    { emoji:'🚫', name:'ไม่รับ', price:0 },
+  ]},
+};
+function presetToDraftGroup(preset){
+  return { _key:newKey(), name:preset.name, selectType:preset.selectType, required:preset.required, maxSelect:preset.maxSelect,
+    options: preset.options.map(o => ({ _key:newKey(), emoji:o.emoji, name:o.name, price:o.price, available:true })) };
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove('show'),1900);
+}
+function money(n){ return Number(n||0).toLocaleString('th-TH') + ' บาท'; }
+
+/* ============ USERNAME -> รหัสอีเมลภายใน (ผู้ใช้ไม่ต้องมีอีเมลจริง) ============ */
+function usernameToEmail(username) {
+  const norm = username.trim().toLowerCase();
+  let hash = 5381;
+  for (let i = 0; i < norm.length; i++) { hash = ((hash << 5) + hash + norm.charCodeAt(i)) >>> 0; }
+  const slug = norm.replace(/[^a-z0-9]/g, '').slice(0, 20) || 'u';
+  // หมายเหตุ: เดิมใช้โดเมน "merchants.imduan.internal" แต่ .internal เป็น TLD ที่สงวนไว้
+  // (reserved TLD ตาม RFC 6761 เหมือน .local/.test/.invalid) ทำให้ Supabase Auth ปฏิเสธ
+  // อีเมลนี้เวลาต้องส่งอีเมลจริง เช่น "Send password recovery" (error: "Email address ... is invalid")
+  // เปลี่ยนมาใช้โดเมนที่ไม่ถูกสงวนแทน เพื่อให้ signUp/signIn/reset password ทำงานได้ปกติ
+  return `${slug}${hash.toString(36)}@merchants.imduan-app.com`;
+}
+
+/* ============ AUTH / INIT ============ */
+async function init(){
+  if (!supabaseClient) { state.view = 'needs-config'; render(); return; }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { state.view = 'auth'; state.authMode = 'login'; render(); return; }
+  state.user = session.user;
+  await afterLogin();
+}
+async function afterLogin(){
+  try {
+    const { data, error } = await supabaseClient.from('restaurants').select('*').eq('owner_id', state.user.id).maybeSingle();
+    if (error) throw error;
+    if (!data) { state.view = 'setup-profile'; render(); return; }
+    state.restaurant = data; state.restaurantId = data.id;
+    if (data.status === 'pending') { state.view = 'pending'; render(); return; }
+    if (data.status === 'suspended') { state.view = 'suspended'; render(); return; }
+    await Promise.all([refreshOrders(), refreshMenu(), refreshStats()]);
+    state.view = 'dashboard'; render();
+    keepScreenOn();
+    subscribeOrders();
+    ensureNotificationPermission();
+  } catch (err) { console.error(err); showToast('โหลดข้อมูลไม่สำเร็จ'); }
+}
+function normalizePromptpay(v){ return String(v||'').replace(/\D/g,''); }
+function isValidPromptpay(id){ return id.length === 10 || id.length === 13 || id.length === 15; }
+function updatePromptpayPreview(){
+  const box = document.getElementById('pp-preview'), img = document.getElementById('pp-preview-img');
+  const id = normalizePromptpay(document.getElementById('sp-promptpay').value);
+  if (!box || !img) return;
+  if (isValidPromptpay(id)) { img.src = `https://promptpay.io/${id}.png`; box.style.display = 'block'; }
+  else box.style.display = 'none';
+}
+function readShopForm(){
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const f = {
+    nameTh: v('sp-name'), nameEn: v('sp-name-en'), category: v('sp-cat'), phone: v('sp-phone'), address: v('sp-address'),
+    lat: v('sp-lat'), lng: v('sp-lng'), ownerFirst: v('sp-owner-first'), ownerLast: v('sp-owner-last'),
+    ownerPhone: v('sp-owner-phone'), ownerNid: v('sp-owner-nid'), promptpay: normalizePromptpay(v('sp-promptpay')),
+    storefrontFile: document.getElementById('sp-storefront').files[0],
+    idCardFile: document.getElementById('sp-owner-idcard').files[0],
+  };
+  let err = null;
+  if (!f.nameTh) err = 'กรอกชื่อร้าน (ภาษาไทย)';
+  else if (!f.category) err = 'เลือกประเภทร้านค้า';
+  else if (!f.phone) err = 'กรอกเบอร์โทรร้านค้า';
+  else if (!f.ownerFirst || !f.ownerLast) err = 'กรอกชื่อ-นามสกุลเจ้าของร้าน';
+  else if (!/^\d{13}$/.test(f.ownerNid)) err = 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก';
+  else if (!f.idCardFile) err = 'กรุณาแนบรูปบัตรประชาชนเจ้าของร้าน';
+  else if (f.promptpay && !isValidPromptpay(f.promptpay)) err = 'หมายเลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก';
+  return { f, err };
+}
+async function saveShopProfile(f){
+  const catInfo = CATEGORY_OPTIONS.find(c => c.id === f.category);
+  let storefrontUrl = null;
+  if (f.storefrontFile) storefrontUrl = await uploadPublicFile('storefront-images', state.user.id, f.storefrontFile);
+  const idCardPath = await uploadPrivateFile(state.user.id, f.idCardFile);
+  const { error } = await supabaseClient.from('restaurants').insert({
+    name: f.nameTh, name_en: f.nameEn || null, category: f.category, tags: catInfo ? catInfo.label : '',
+    phone: f.phone, address: f.address, lat: f.lat ? Number(f.lat) : null, lng: f.lng ? Number(f.lng) : null,
+    storefront_url: storefrontUrl,
+    owner_first_name: f.ownerFirst, owner_last_name: f.ownerLast, owner_phone: f.ownerPhone,
+    owner_national_id: f.ownerNid, owner_id_card_path: idCardPath,
+    promptpay_id: f.promptpay || null,
+    promptpay_name: `${f.ownerFirst} ${f.ownerLast}`.trim() || null,
+    owner_id: state.user.id, status: 'pending',
+  });
+  if (error) throw error;
+}
+function setSubmitBtn(busy, text){
+  const btn = document.getElementById('sp-submit-btn');
+  if (btn) { btn.disabled = busy; btn.textContent = text; }
+}
+async function doSignup(){
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!username || !password) { showToast('กรอกไอดีและรหัสผ่าน'); return; }
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) { showToast('ไอดีต้องเป็นภาษาอังกฤษ a-z, ตัวเลข 0-9 หรือ _ เท่านั้น (3-20 ตัวอักษร)'); return; }
+  if (password.length < 6) { showToast('รหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
+  const { f, err } = readShopForm();
+  if (err) { showToast(err); return; }
+  setSubmitBtn(true, 'กำลังสมัคร...');
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({ email: usernameToEmail(username), password });
+    if (error) throw error;
+    if (!data.session) { showToast('สมัครไม่สำเร็จ: ต้องปิด "Confirm email" ใน Supabase ก่อน'); setSubmitBtn(false, 'บันทึกและส่งขออนุมัติ'); return; }
+    state.user = data.user;
+    await saveShopProfile(f);
+    showToast('สมัครสำเร็จ! กำลังรอแอดมินอนุมัติ');
+    await afterLogin();
+  } catch (e) {
+    console.error(e);
+    if (String(e.message||'').includes('already registered')) showToast('ชื่อผู้ใช้นี้มีคนใช้แล้ว ลองชื่ออื่น');
+    else showToast('สมัครไม่สำเร็จ: ' + (e.message||''));
+    // ถ้าสร้างบัญชีได้แล้วแต่บันทึกร้านไม่สำเร็จ ให้ไปหน้ากรอกข้อมูลร้านต่อ (ไม่ต้องสมัครบัญชีซ้ำ)
+    if (state.user) { state.view = 'setup-profile'; render(); }
+    else setSubmitBtn(false, 'บันทึกและส่งขออนุมัติ');
+  }
+}
+async function doLogin(){
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!username || !password) { showToast('กรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
+  try {
+    const email = usernameToEmail(username);
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    state.user = data.user;
+    await afterLogin();
+  } catch (err) { console.error(err); showToast('เข้าสู่ระบบไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function doLogout(){
+  if (ordersChannel) { supabaseClient.removeChannel(ordersChannel); ordersChannel = null; }
+  await supabaseClient.auth.signOut();
+  state = { view:'auth', authMode:'login', user:null, restaurant:null, restaurantId:null, tab:'orders', menuFilter:'all', menuQuery:'', stats:null, newOrders:[], searchingOrders:[], preparingOrders:[], readyOrders:[], pickedUpOrders:[], menu:[] };
+  render();
+}
+const CATEGORY_OPTIONS = [
+  { id: 'isaan', label: 'ส้มตำ/อีสาน' }, { id: 'noodle', label: 'ก๋วยเตี๋ยว' }, { id: 'thai', label: 'อาหารไทย' },
+  { id: 'dessert', label: 'ของหวาน/เครื่องดื่ม' }, { id: 'bakery', label: 'เบเกอรี่' }, { id: 'pizza', label: 'พิซซ่า/พาสต้า' },
+  { id: 'japanese', label: 'ญี่ปุ่น' }, { id: 'fastfood', label: 'ฟาสต์ฟู้ด' }, { id: 'other', label: 'อื่นๆ' },
+];
+const MENU_GROUP_OPTIONS = [
+  'เมนูแนะนำ', 'จานเดียว', 'กับข้าว', 'ต้ม', 'ยำ', 'ของทานเล่น', 'ย่าง/ทอด', 'ก๋วยเตี๋ยว/เส้น', 'สลัด', 'เครื่องดื่ม', 'ของหวาน', 'อื่นๆ',
+];
+let profileMap = null, profileMarker = null;
+function initProfileMap(){
+  const el = document.getElementById('profile-map');
+  if (!el || typeof L === 'undefined') return;
+  if (profileMap) { try { profileMap.remove(); } catch(e) {} profileMap = null; profileMarker = null; }
+  profileMap = L.map('profile-map').setView([13.7563, 100.5018], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(profileMap);
+  profileMap.on('click', (e) => setProfileMarker(e.latlng.lat, e.latlng.lng));
+}
+function setProfileMarker(lat, lng){
+  if (!profileMarker) profileMarker = L.marker([lat, lng]).addTo(profileMap);
+  else profileMarker.setLatLng([lat, lng]);
+  profileMap.setView([lat, lng], 15);
+  document.getElementById('sp-lat').value = lat.toFixed(6);
+  document.getElementById('sp-lng').value = lng.toFixed(6);
+  const lbl = document.getElementById('map-coords-label');
+  if (lbl) lbl.textContent = `📍 พิกัดที่เลือก: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+function useCurrentLocationForProfile(){
+  if (!('geolocation' in navigator)) { showToast('อุปกรณ์นี้ไม่รองรับ GPS'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => setProfileMarker(pos.coords.latitude, pos.coords.longitude),
+    () => showToast('ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตสิทธิ์ GPS')
+  );
+}
+function previewFileTo(inputId, imgId){
+  const input = document.getElementById(inputId);
+  const img = document.getElementById(imgId);
+  const file = input.files && input.files[0];
+  if (!file || !img) return;
+  const reader = new FileReader();
+  reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+  reader.readAsDataURL(file);
+}
+async function uploadPublicFile(bucket, pathPrefix, file){
+  const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+  const path = `${pathPrefix}/${Date.now()}_${safeName}`;
+  const { error } = await supabaseClient.storage.from(bucket).upload(path, file);
+  if (error) throw error;
+  const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+async function uploadPrivateFile(pathPrefix, file){
+  const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+  const path = `${pathPrefix}/${Date.now()}_${safeName}`;
+  const { error } = await supabaseClient.storage.from('verification-docs').upload(path, file);
+  if (error) throw error;
+  return path; // เก็บแค่ path ไว้ ไม่ใช่ url สาธารณะ (บักเก็ตนี้ปิดอยู่)
+}
+async function submitProfile(){
+  const { f, err } = readShopForm();
+  if (err) { showToast(err); return; }
+  setSubmitBtn(true, 'กำลังอัปโหลด...');
+  try {
+    await saveShopProfile(f);
+    showToast('บันทึกโปรไฟล์ร้านแล้ว กำลังรอแอดมินอนุมัติ');
+    await afterLogin();
+  } catch (e) {
+    console.error(e);
+    showToast('บันทึกไม่สำเร็จ: ' + (e.message||''));
+    setSubmitBtn(false, 'บันทึกและส่งขออนุมัติ');
+  }
+}
+
+/* ============ DATA ============ */
+async function refreshOrders(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_code,status,total,address,note,created_at,is_self_delivery,rider_id,payment_method,payment_slip_url,order_items(name,emoji,qty,price,selected_options)')
+      .eq('restaurant_id', state.restaurantId)
+      .in('status', ['pending','preparing','ready','picked_up'])
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    const all = data || [];
+    // ร้านที่ไม่ได้เปิดจัดส่งเอง: ออเดอร์สถานะ pending คือ "กำลังหาไรเดอร์" ยังไม่ต้องทำอะไร จะโผล่ preparing เองเมื่อมีไรเดอร์รับ
+    state.newOrders = all.filter(o => o.status === 'pending' && o.is_self_delivery);
+    state.searchingOrders = all.filter(o => o.status === 'pending' && !o.is_self_delivery);
+    state.preparingOrders = all.filter(o => o.status === 'preparing');
+    state.readyOrders = all.filter(o => o.status === 'ready');
+    state.pickedUpOrders = all.filter(o => o.status === 'picked_up' && o.is_self_delivery);
+    if (typeof setConn === 'function') setConn('ok');
+  } catch (err) { console.warn('refreshOrders failed', err); if (typeof setConn === 'function') setConn('off'); }
+}
+async function refreshMenu(){
+  try {
+    const { data, error } = await supabaseClient
+      .from('menu_items').select('*, menu_item_option_groups(id)').eq('restaurant_id', state.restaurantId).order('group_name').order('name');
+    if (error) throw error;
+    state.menu = data || [];
+  } catch (err) {
+    console.warn('refreshMenu failed (maybe menu_item_option_groups table missing), retrying without it', err);
+    try {
+      const { data, error } = await supabaseClient.from('menu_items').select('*').eq('restaurant_id', state.restaurantId).order('group_name').order('name');
+      if (error) throw error;
+      state.menu = data || [];
+    } catch (err2) { console.warn('refreshMenu failed', err2); }
+  }
+}
+
+/* ============ แจ้งเตือนงานใหม่ (เสียง + Notification เบราว์เซอร์) ============ */
+let sharedAudioCtx = null;
+function playAlertSound(){
+  try {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+    const ctx = sharedAudioCtx;
+    const now = ctx.currentTime;
+    [0, 0.18, 0.36].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.35, now + t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now + t); osc.stop(now + t + 0.16);
+    });
+  } catch (e) { console.warn('เล่นเสียงไม่ได้', e); }
+}
+function ensureNotificationPermission(){
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') Notification.requestPermission();
+}
+function showBrowserNotification(title, body){
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try { new Notification(title, { body }); } catch (e) { console.warn(e); }
+}
+
+function subscribeOrders(){
+  if (!supabaseClient || ordersChannel) return;
+  console.log('[realtime] subscribing to merchant_orders_' + state.restaurantId, 'restaurantId =', state.restaurantId);
+  ordersChannel = supabaseClient
+    .channel('merchant_orders_' + state.restaurantId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
+      console.log('[realtime] INSERT payload received:', payload);
+      // ร้านทั่วไป (ไม่ได้ส่งเอง) ยังไม่ต้องแจ้งตอนนี้ เพราะรอไรเดอร์รับงานก่อนถึงจะเริ่มปรุง
+      if (payload.new.is_self_delivery) {
+        playAlertSound();
+        showBrowserNotification('🔔 มีออเดอร์ใหม่เข้ามา!', `ออเดอร์ #${payload.new.order_code || ''} รอการยืนยัน`);
+        showToast('🔔 มีออเดอร์ใหม่เข้ามา!');
+      }
+      await refreshOrders(); softRender();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${state.restaurantId}` }, async (payload) => {
+      console.log('[realtime] UPDATE payload received:', payload);
+      // ไรเดอร์เพิ่งรับงาน (pending -> preparing) คือสัญญาณให้ครัวเริ่มทำอาหาร แจ้งเตือนตอนนี้แทน
+      if (payload.new.status === 'preparing' && payload.old && payload.old.status === 'pending' && !payload.new.is_self_delivery) {
+        playAlertSound();
+        showBrowserNotification('👨‍🍳 มีไรเดอร์รับงานแล้ว!', `เริ่มปรุงออเดอร์ #${payload.new.order_code || ''} ได้เลย`);
+        showToast('👨‍🍳 ไรเดอร์รับงานแล้ว เริ่มปรุงได้เลย!');
+      }
+      await refreshOrders(); softRender();
+    })
+    .subscribe((status, err) => {
+      console.log('[realtime] subscription status:', status, err || '');
+      if (status === 'SUBSCRIBED') setConn('ok');
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        setConn('off');
+        console.warn('[realtime] subscribe ไม่สำเร็จ:', status, err);
+      }
+    });
+}
+/* ============ AUTO-REFRESH สำรอง (เผื่อ realtime หลุด) ============ */
+/* ดึงออเดอร์ใหม่ทุก 8 วินาที เป็น fallback เสริมจาก realtime ไม่ได้ใช้แทน */
+setInterval(async () => {
+  if (state.view === 'dashboard' && state.restaurantId) {
+    await refreshOrders();
+    try {
+      const { data } = await supabaseClient.from('restaurants').select('is_open').eq('id', state.restaurantId).maybeSingle();
+      if (data && state.restaurant && data.is_open !== state.restaurant.is_open) { state.restaurant.is_open = data.is_open; if (!activeSheet && state.tab !== 'menu') { render(); return; } }
+    } catch(e){}
+    softRender();
+  }
+}, 8000);
+
+/* ============ ORDER ACTIONS ============ */
+async function acceptOrder(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'preparing' }).eq('id', id).eq('status','pending'); if (error) throw error;
+    showToast('รับออเดอร์แล้ว กำลังปรุงอาหาร'); await refreshOrders(); render();
+    if (isAutoPrint()) printOrder(id);
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+function openCancelSheet(id, fromStatus){
+  cancelTarget = { id, fromStatus };
+  activeSheet = 'cancel-order';
+  render();
+}
+function pickCancelReason(reason){
+  const el = document.getElementById('cancel-reason-text');
+  if (el) el.value = reason;
+}
+async function confirmCancelOrder(){
+  if (!cancelTarget) return;
+  const reasonEl = document.getElementById('cancel-reason-text');
+  const reason = (reasonEl ? reasonEl.value : '').trim();
+  if (!reason) { showToast('กรุณาระบุเหตุผลที่ยกเลิกออเดอร์'); return; }
+  const { id, fromStatus } = cancelTarget;
+  try {
+    const { error } = await supabaseClient.from('orders')
+      .update({ status: 'cancelled', cancel_reason: reason, cancelled_by: 'merchant' })
+      .eq('id', id).eq('status', fromStatus);
+    if (error) throw error;
+    showToast('ยกเลิกออเดอร์แล้ว');
+    cancelTarget = null; activeSheet = null;
+    await refreshOrders(); render();
+  } catch (err) {
+    console.error(err);
+    showToast('ยกเลิกออเดอร์ไม่สำเร็จ: ' + (err.message||''));
+  }
+}
+async function markReady(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'ready' }).eq('id', id).eq('status','preparing'); if (error) throw error;
+    showToast('อาหารพร้อมแล้ว'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function selfDispatch(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'picked_up' }).eq('id', id).eq('status','ready'); if (error) throw error;
+    showToast('ออกจัดส่งแล้ว'); await refreshOrders(); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function selfDelivered(id){
+  try { const { error } = await supabaseClient.from('orders').update({ status: 'delivered' }).eq('id', id).eq('status','picked_up'); if (error) throw error;
+    showToast('ส่งถึงลูกค้าแล้ว! 🎉'); await Promise.all([refreshOrders(), refreshStats()]); render();
+  } catch (err) { console.error(err); showToast('ดำเนินการไม่สำเร็จ'); }
+}
+async function toggleSelfDelivery(){
+  const newVal = !state.restaurant.self_delivery_enabled;
+  try {
+    const { error } = await supabaseClient.from('restaurants').update({ self_delivery_enabled: newVal }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.self_delivery_enabled = newVal;
+    showToast(newVal ? '🎉 เปิดโหมด "จัดส่งเองโดยทางร้าน" แล้ว' : 'ปิดโหมดจัดส่งเอง กลับไปใช้ไรเดอร์ภายนอก');
+    render();
+  } catch (err) { console.error(err); showToast('เปลี่ยนโหมดไม่สำเร็จ'); render(); }
+}
+async function toggleOpenStatus(){
+  const newVal = !(state.restaurant.is_open !== false);
+  try {
+    const { error } = await supabaseClient.from('restaurants').update({ is_open: newVal }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.is_open = newVal;
+    showToast(newVal ? '🟢 เปิดร้านแล้ว ลูกค้าสั่งได้' : '🔴 ปิดร้านแล้ว ลูกค้าจะไม่เห็นเมนูของคุณจนกว่าจะเปิดอีกครั้ง');
+    render();
+  } catch (err) { console.error(err); showToast('เปลี่ยนสถานะร้านไม่สำเร็จ'); render(); }
+}
+async function updateStorefrontPhoto(){
+  const input = document.getElementById('storefront-update-input');
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  showToast('กำลังอัปโหลดรูปหน้าร้าน...');
+  try {
+    const url = await uploadPublicFile('storefront-images', state.restaurantId, file);
+    const { error } = await supabaseClient.from('restaurants').update({ storefront_url: url }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.storefront_url = url;
+    showToast('อัปเดตรูปหน้าร้านแล้ว ลูกค้าจะเห็นรูปใหม่ทันที');
+    render();
+  } catch (err) { console.error(err); showToast('อัปโหลดรูปไม่สำเร็จ: ' + (err.message||'')); }
+}
+
+/* ============ MENU ACTIONS (พร้อมอัปโหลดรูป) ============ */
+function openAddItemSheet(){
+  editingItemId = null; draftOptionGroups = [];
+  draftBaseFields = { name:'', group:'', price:'', emoji:'', desc:'' };
+  draftImageFile = null; draftImagePreviewDataUrl = null;
+  activeSheet = 'add-item'; render();
+}
+async function openEditItemSheet(id){
+  const item = state.menu.find(m => m.id === id);
+  if (!item) return;
+  editingItemId = id; draftOptionGroups = [];
+  draftBaseFields = { name:item.name||'', group:item.group_name||'', price:item.price||'', emoji:item.emoji||'', desc:item.description||'' };
+  draftImageFile = null; draftImagePreviewDataUrl = null;
+  activeSheet = 'add-item'; render();
+  try {
+    const { data, error } = await supabaseClient
+      .from('menu_item_option_groups')
+      .select('*, menu_item_options(*)')
+      .eq('menu_item_id', id)
+      .order('sort_order');
+    if (error) throw error;
+    draftOptionGroups = (data||[]).map(g => ({
+      _key:newKey(), name:g.name, selectType:g.select_type, required:g.required, maxSelect:g.max_select || 1,
+      options: (g.menu_item_options||[]).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(o => ({
+        _key:newKey(), emoji:o.emoji||'', name:o.name, price:o.price_delta, available: o.is_available !== false,
+      })),
+    }));
+    refreshOverlay();
+  } catch (err) {
+    console.warn('โหลดตัวเลือกเมนูไม่สำเร็จ (อาจยังไม่ได้สร้างตาราง menu_item_option_groups)', err);
+  }
+}
+function closeSheet(){
+  activeSheet = null; cancelTarget = null; editingItemId = null; draftOptionGroups = [];
+  draftBaseFields = { name:'', group:'', price:'', emoji:'', desc:'' };
+  draftImageFile = null; draftImagePreviewDataUrl = null;
+  render();
+}
+function refreshOverlay(){
+  let overlayEl = document.getElementById('overlay-root');
+  let savedScroll = 0;
+  if (overlayEl) {
+    const sheetEl = overlayEl.querySelector('.sheet');
+    if (sheetEl) savedScroll = sheetEl.scrollTop;
+    overlayEl.remove();
+  }
+  if (activeSheet === 'add-item' || activeSheet === 'cancel-order') {
+    const div = document.createElement('div');
+    div.id = 'overlay-root'; div.className = 'overlay';
+    div.onclick = (e) => { if (e.target === div) closeSheet(); };
+    div.innerHTML = activeSheet === 'add-item' ? addItemSheetHtml() : cancelOrderSheetHtml();
+    document.body.appendChild(div);
+    if (activeSheet === 'add-item') reattachDraftImage();
+    const newSheetEl = div.querySelector('.sheet');
+    if (newSheetEl) {
+      newSheetEl.scrollTop = savedScroll;
+      requestAnimationFrame(() => { newSheetEl.scrollTop = savedScroll; });
+    }
+  }
+}
+/* คืนไฟล์รูปและพรีวิวที่ผู้ใช้เลือกไว้กลับเข้า input หลัง sheet ถูกวาดใหม่ (input file ใหม่จะว่างเปล่าเสมอ) */
+function reattachDraftImage(){
+  const input = document.getElementById('mi-image');
+  const preview = document.getElementById('mi-preview');
+  if (input && draftImageFile) {
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(draftImageFile);
+      input.files = dt.files;
+    } catch (e) { console.warn('reattach image failed', e); }
+  }
+  if (preview && draftImagePreviewDataUrl) { preview.src = draftImagePreviewDataUrl; preview.style.display = 'block'; }
+}
+/* อ่านค่าล่าสุดจาก input/textarea ในกลุ่มตัวเลือกทั้งหมด กลับเข้า draftOptionGroups ก่อนจะสั่ง re-render หรือบันทึก
+   ป้องกันข้อมูลที่พิมพ์ค้างหายเวลามีการเพิ่ม/ลบแถว หรือรีเฟรชพื้นหลัง */
+function syncDraftFromDom(){
+  const nameEl0 = document.getElementById('mi-name');
+  const groupEl0 = document.getElementById('mi-group');
+  const priceEl0 = document.getElementById('mi-price');
+  const emojiEl0 = document.getElementById('mi-emoji');
+  const descEl0 = document.getElementById('mi-desc');
+  if (nameEl0) draftBaseFields.name = nameEl0.value;
+  if (groupEl0) draftBaseFields.group = groupEl0.value;
+  if (priceEl0) draftBaseFields.price = priceEl0.value;
+  if (emojiEl0) draftBaseFields.emoji = emojiEl0.value;
+  if (descEl0) draftBaseFields.desc = descEl0.value;
+  draftOptionGroups.forEach(g => {
+    const nameEl = document.getElementById('og-name-'+g._key);
+    if (nameEl) g.name = nameEl.value;
+    const maxEl = document.getElementById('og-max-'+g._key);
+    if (maxEl) g.maxSelect = Math.max(1, Number(maxEl.value)||1);
+    g.options.forEach(o => {
+      const eEl = document.getElementById('oo-emoji-'+o._key);
+      const nEl = document.getElementById('oo-name-'+o._key);
+      const pEl = document.getElementById('oo-price-'+o._key);
+      const aEl = document.getElementById('oo-avail-'+o._key);
+      if (eEl) o.emoji = eEl.value;
+      if (nEl) o.name = nEl.value;
+      if (pEl) o.price = Number(pEl.value)||0;
+      if (aEl) o.available = !aEl.checked; // checkbox หมายถึง "ของหมดชั่วคราว"
+    });
+  });
+}
+function addPresetGroup(key){
+  syncDraftFromDom();
+  draftOptionGroups.push(presetToDraftGroup(OPTION_GROUP_PRESETS[key]));
+  refreshOverlay();
+}
+function addCustomGroup(){
+  syncDraftFromDom();
+  draftOptionGroups.push({ _key:newKey(), name:'', selectType:'single', required:true, maxSelect:1, options:[
+    { _key:newKey(), emoji:'', name:'', price:0, available:true },
+  ]});
+  refreshOverlay();
+}
+function removeGroup(gkey){
+  syncDraftFromDom();
+  draftOptionGroups = draftOptionGroups.filter(g => g._key !== gkey);
+  refreshOverlay();
+}
+function addOption(gkey){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.options.push({ _key:newKey(), emoji:'', name:'', price:0, available:true });
+  refreshOverlay();
+}
+function removeOption(gkey, okey){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.options = g.options.filter(o => o._key !== okey);
+  refreshOverlay();
+}
+function setGroupType(gkey, val){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.selectType = val;
+  refreshOverlay();
+}
+function setGroupRequired(gkey, val){
+  syncDraftFromDom();
+  const g = draftOptionGroups.find(x => x._key === gkey);
+  if (g) g.required = val;
+  refreshOverlay();
+}
+function previewImage(input){
+  const preview = document.getElementById('mi-preview');
+  const file = input.files && input.files[0];
+  draftImageFile = file || null;
+  if (!file) { draftImagePreviewDataUrl = null; if (preview) preview.style.display = 'none'; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    draftImagePreviewDataUrl = e.target.result;
+    if (preview) { preview.src = e.target.result; preview.style.display = 'block'; }
+  };
+  reader.readAsDataURL(file);
+}
+async function toggleMenuItem(id, current){
+  try { const { error } = await supabaseClient.from('menu_items').update({ is_available: !current }).eq('id', id); if (error) throw error;
+    await refreshMenu(); render();
+  } catch (err) { console.error(err); showToast('อัปเดตเมนูไม่สำเร็จ'); render(); }
+}
+async function saveOptionGroupsForItem(itemId){
+  // ลบกลุ่มตัวเลือกเดิมทั้งหมดของเมนูนี้ (cascade ลบตัวเลือกย่อยไปด้วย) แล้วบันทึกชุดใหม่ทั้งหมดแทน
+  const { error: delErr } = await supabaseClient.from('menu_item_option_groups').delete().eq('menu_item_id', itemId);
+  if (delErr) throw delErr;
+  for (let gi = 0; gi < draftOptionGroups.length; gi++){
+    const g = draftOptionGroups[gi];
+    if (!g.name || !g.name.trim()) continue;
+    const validOptions = g.options.filter(o => o.name && o.name.trim());
+    if (validOptions.length === 0) continue;
+    const { data: gRow, error: gErr } = await supabaseClient.from('menu_item_option_groups').insert({
+      menu_item_id: itemId, name: g.name.trim(), select_type: g.selectType, required: !!g.required,
+      max_select: g.selectType === 'multi' ? Math.max(1, Number(g.maxSelect)||1) : 1, sort_order: gi,
+    }).select().single();
+    if (gErr) throw gErr;
+    const optionsPayload = validOptions.map((o, oi) => ({
+      group_id: gRow.id, emoji: o.emoji || null, name: o.name.trim(), price_delta: Number(o.price)||0,
+      is_available: o.available !== false, sort_order: oi,
+    }));
+    const { error: oErr } = await supabaseClient.from('menu_item_options').insert(optionsPayload);
+    if (oErr) throw oErr;
+  }
+}
+async function saveMenuItem(){
+  syncDraftFromDom();
+  const name = document.getElementById('mi-name').value.trim();
+  const group = document.getElementById('mi-group').value.trim() || 'เมนู';
+  const price = Number(document.getElementById('mi-price').value);
+  const emoji = document.getElementById('mi-emoji').value.trim() || '🍽️';
+  const desc = document.getElementById('mi-desc').value.trim();
+  const fileInput = document.getElementById('mi-image');
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if (!name || !price) { showToast('กรอกชื่อเมนูและราคาให้ครบ'); return; }
+  for (const g of draftOptionGroups){
+    if (g.name && g.name.trim() && g.options.filter(o=>o.name&&o.name.trim()).length===0){
+      showToast(`กลุ่ม "${g.name}" ต้องมีตัวเลือกอย่างน้อย 1 ข้อ`); return;
+    }
+  }
+  try {
+    let imageUrl = editingItemId ? undefined : null;
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]+/g, '_');
+      const path = `${state.restaurantId}/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabaseClient.storage.from('menu-images').upload(path, file);
+      if (upErr) throw upErr;
+      const { data: pub } = supabaseClient.storage.from('menu-images').getPublicUrl(path);
+      imageUrl = pub.publicUrl;
+    }
+    let itemId = editingItemId;
+    if (editingItemId) {
+      const patch = { group_name: group, name, price, emoji, description: desc };
+      if (imageUrl !== undefined) patch.image_url = imageUrl;
+      const { error } = await supabaseClient.from('menu_items').update(patch).eq('id', editingItemId);
+      if (error) throw error;
+    } else {
+      const { data: newItem, error } = await supabaseClient.from('menu_items').insert({
+        restaurant_id: state.restaurantId, group_name: group, name, price, emoji, description: desc, is_available: true, image_url: imageUrl,
+      }).select().single();
+      if (error) throw error;
+      itemId = newItem.id;
+    }
+    try { await saveOptionGroupsForItem(itemId); }
+    catch(optErr) {
+      console.warn('บันทึกตัวเลือกเมนูไม่สำเร็จ (อาจยังไม่ได้สร้างตาราง menu_item_option_groups / menu_item_options ใน Supabase)', optErr);
+      showToast('บันทึกเมนูแล้ว แต่บันทึกตัวเลือกเพิ่มเติมไม่สำเร็จ — ตรวจสอบว่าสร้างตารางตัวเลือกใน Supabase แล้วหรือยัง');
+      closeSheet(); await refreshMenu(); render();
+      return;
+    }
+    showToast(editingItemId ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มเมนูแล้ว');
+    closeSheet();
+    await refreshMenu(); render();
+  } catch (err) { console.error(err); showToast('บันทึกเมนูไม่สำเร็จ: ' + (err.message||'')); }
+}
+async function deleteMenuItem(id){
+  if (!confirm('ลบเมนูนี้?')) return;
+  try { const { error } = await supabaseClient.from('menu_items').delete().eq('id', id); if (error) throw error;
+    await refreshMenu(); render();
+  } catch (err) { console.error(err); showToast('ลบไม่สำเร็จ'); }
+}
+
+
+/* ============ RENDER (หน้าเดิมที่ยังใช้) ============ */
+function needsConfigHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">⚙️</div>
+    <h2 style="font-size:17px;margin-top:10px;">ยังไม่ได้เชื่อมต่อฐานข้อมูล</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;line-height:1.6;">กรุณาใส่ Supabase key ในโค้ด (ตัวแปร SUPABASE_KEY) ก่อนใช้งานแอปร้านค้าจริง</p>
+  </div>`;
+}
+const APP_DOWNLOAD_URL = 'https://drive.google.com/drive/folders/1aqCCEri53312C3Dp7olKgpoxC1mQhusO?usp=sharing';
+function downloadCardHtml(){
+  return `<a class="dl-card" href="${APP_DOWNLOAD_URL}" target="_blank" rel="noopener">
+    <div class="dl-ic">📱</div>
+    <div class="dl-tx"><b>ดาวน์โหลดแอป (Android)</b><small>ไฟล์ติดตั้ง .apk · โหลดก่อนเข้าสู่ระบบหรือกรอกข้อมูล</small></div>
+    <span class="dl-go">โหลด ›</span></a>
+  <details class="dl-help"><summary>วิธีติดตั้งแอป (กดเพื่อดู)</summary>
+    <ol>
+      <li>กด "โหลด" แล้วเลือกไฟล์ .apk ในโฟลเดอร์ → กดปุ่มดาวน์โหลด</li>
+      <li>เปิดไฟล์ที่โหลดเสร็จ (จากแถบแจ้งเตือน หรือแอป "ไฟล์" → ดาวน์โหลด)</li>
+      <li>ถ้ามือถือขึ้นว่า <b>"ไม่อนุญาตให้ติดตั้งแอปจากแหล่งที่ไม่รู้จัก"</b> กด <b>ตั้งค่า</b> → เปิด <b>"อนุญาตจากแหล่งนี้"</b> แล้วกดย้อนกลับ</li>
+      <li>กด <b>ติดตั้ง</b> รอสักครู่ แล้วกด <b>เปิด</b></li>
+    </ol>
+    <div style="margin-top:6px;">ข้อความเตือนนี้เป็นเรื่องปกติของแอปที่ไม่ได้ลงใน Play Store · ถ้า Play Protect ถาม ให้กด "ติดตั้งต่อไป"</div>
+  </details>`;
+}
+function authHtml(){
+  const isSignup = state.authMode === 'signup';
+  if (!isSignup) {
+    return `
+    <div class="onboard-card">
+      <div class="onboard-emoji">🏪</div>
+      <h2 style="font-size:17px;margin-top:10px;">เข้าสู่ระบบร้านค้า</h2>
+      <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">เข้าสู่ระบบด้วยชื่อผู้ใช้ที่ตั้งไว้</p>
+      ${downloadCardHtml()}
+      <div class="f-label">ไอดี</div>
+      <input id="auth-username" type="text" class="f-input" placeholder="ไอดีของร้าน (a-z, 0-9)" autocomplete="username">
+      <div class="f-label">รหัสผ่าน</div>
+      <input id="auth-password" type="password" class="f-input" placeholder="รหัสผ่าน" autocomplete="current-password">
+      <button class="btn-primary" onclick="doLogin()">เข้าสู่ระบบ</button>
+      <button class="btn-primary" style="background:transparent;color:var(--primary);margin-top:8px;box-shadow:none;" onclick="state.authMode='signup';render()">
+        ยังไม่มีร้าน? สมัครใหม่
+      </button>
+    </div>`;
+  }
+  return shopFormHtml(true);
+}
+function setupProfileHtml(){ return shopFormHtml(false); }
+function shopFormHtml(withAccount){
+  setTimeout(initProfileMap, 100);
+  const catOptions = CATEGORY_OPTIONS.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+  return `
+  <div class="onboard-card" style="text-align:left;margin:24px 18px;">
+    <div style="text-align:center;">
+      <div class="onboard-emoji">${withAccount ? '🏪' : '📝'}</div>
+      <h2 style="font-size:17px;margin-top:10px;">สมัครร้านค้า — กรอกข้อมูลให้ครบ</h2>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">ข้อมูลทั้งหมดจะถูกส่งให้แอดมินตรวจสอบก่อนเปิดขายจริง</p>
+    </div>
+    ${withAccount ? downloadCardHtml() : ''}
+    ${withAccount ? `
+    <div class="form-section-title">บัญชีผู้ใช้</div>
+    <div class="f-label">ไอดี (ภาษาอังกฤษ/ตัวเลขเท่านั้น)</div>
+    <input id="auth-username" type="text" class="f-input" placeholder="เช่น myshop01" autocomplete="username" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_]/g,'')">
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ใช้ตัวอักษร a-z, ตัวเลข 0-9 หรือ _ เท่านั้น (3-20 ตัวอักษร)</div>
+    <div class="f-label">รหัสผ่าน</div>
+    <input id="auth-password" type="password" class="f-input" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">` : ''}
+
+    <div class="form-section-title">ข้อมูลทั่วไปของร้านค้า</div>
+    <div class="f-label">ชื่อร้านค้า (ภาษาไทย)</div>
+    <input id="sp-name" class="f-input" placeholder="เช่น ส้มตำแซ่บนัว">
+    <div class="f-label">ชื่อร้านค้า (English) — ถ้ามี</div>
+    <input id="sp-name-en" class="f-input" placeholder="e.g. Saab Nua Som Tum">
+    <div class="f-label">ประเภทอาหาร/สินค้า</div>
+    <select id="sp-cat" class="f-input"><option value="">— เลือกประเภท —</option>${catOptions}</select>
+    <div class="f-label">เบอร์โทรศัพท์ร้านค้า</div>
+    <input id="sp-phone" class="f-input" type="tel" placeholder="08xxxxxxxx">
+    <div class="f-label">ภาพถ่ายหน้าร้าน (เห็นป้ายชื่อร้านชัดเจน)</div>
+    <input id="sp-storefront" type="file" accept="image/*" class="f-input" onchange="previewFileTo('sp-storefront','sp-storefront-preview')">
+    <img id="sp-storefront-preview" class="img-preview">
+
+    <div class="form-section-title">ที่ตั้งร้านค้า</div>
+    <div class="f-label">ที่อยู่ร้านค้าโดยละเอียด</div>
+    <textarea id="sp-address" class="f-input" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด"></textarea>
+    <div class="f-label">พิกัดร้าน (แตะบนแผนที่เพื่อปักหมุด)</div>
+    <div id="profile-map"></div>
+    <button type="button" class="btn-outline-mini" onclick="useCurrentLocationForProfile()">📍 ใช้ตำแหน่งปัจจุบันของฉัน</button>
+    <div class="coords-label" id="map-coords-label">ยังไม่ได้เลือกพิกัด</div>
+    <input type="hidden" id="sp-lat"><input type="hidden" id="sp-lng">
+
+    <div class="form-section-title">ข้อมูลเจ้าของร้าน</div>
+    <div class="field-row">
+      <div><div class="f-label">ชื่อ</div><input id="sp-owner-first" class="f-input" placeholder="ชื่อจริง"></div>
+      <div><div class="f-label">นามสกุล</div><input id="sp-owner-last" class="f-input" placeholder="นามสกุล"></div>
+    </div>
+    <div class="f-label">เบอร์โทรศัพท์เจ้าของร้าน</div>
+    <input id="sp-owner-phone" class="f-input" type="tel" placeholder="08xxxxxxxx">
+    <div class="f-label">เลขบัตรประชาชน (13 หลัก)</div>
+    <input id="sp-owner-nid" class="f-input" inputmode="numeric" maxlength="13" placeholder="1234567890123">
+    <div class="f-label">ภาพถ่ายบัตรประชาชน (เห็นหน้าบัตรชัดเจน ไม่สะท้อนแสง)</div>
+    <input id="sp-owner-idcard" type="file" accept="image/*" class="f-input" onchange="previewFileTo('sp-owner-idcard','sp-owner-idcard-preview')">
+    <img id="sp-owner-idcard-preview" class="img-preview">
+    <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">🔒 รูปบัตรประชาชนถูกเก็บแบบส่วนตัว มีแต่คุณและแอดมินเท่านั้นที่เปิดดูได้</p>
+
+    <div class="form-section-title">การรับเงิน (พร้อมเพย์)</div>
+    <div class="f-label">หมายเลขพร้อมเพย์ (เบอร์มือถือ 10 หลัก / เลขบัตรประชาชน 13 หลัก)</div>
+    <input id="sp-promptpay" class="f-input" inputmode="numeric" placeholder="เช่น 0812345678" oninput="updatePromptpayPreview()">
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">ลูกค้าจะเห็น QR พร้อมยอดเงินของแต่ละออเดอร์ สแกนแล้วโอนเข้าบัญชีนี้ได้ทันที — เว้นว่างได้ถ้ารับแค่เงินสด</div>
+    <div class="pp-preview" id="pp-preview">
+      <img id="pp-preview-img" alt="ตัวอย่าง QR พร้อมเพย์">
+      <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">ตัวอย่าง QR (ไม่ระบุยอด) — สแกนทดสอบได้ว่าขึ้นชื่อบัญชีถูกต้อง</div>
+    </div>
+
+    <button class="btn-primary" id="sp-submit-btn" onclick="${withAccount ? 'doSignup()' : 'submitProfile()'}">บันทึกและส่งขออนุมัติ</button>
+    ${withAccount
+      ? `<button class="btn-primary" style="background:transparent;color:var(--primary);margin-top:8px;box-shadow:none;" onclick="state.authMode='login';render()">มีบัญชีแล้ว? เข้าสู่ระบบ</button>`
+      : `<button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>`}
+  </div>`;
+}
+function pendingHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">⏳</div>
+    <h2 style="font-size:17px;margin-top:10px;">รอการอนุมัติจากแอดมิน</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">ร้าน "${state.restaurant ? state.restaurant.name : ''}" กำลังรอตรวจสอบ กรุณาลองใหม่ภายหลัง</p>
+    <button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+function suspendedHtml(){
+  return `
+  <div class="onboard-card">
+    <div class="onboard-emoji">🚫</div>
+    <h2 style="font-size:17px;margin-top:10px;">ร้านถูกระงับการใช้งาน</h2>
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">ติดต่อทีมแอดมินอิ่มด่วนเพื่อสอบถามรายละเอียด</p>
+    <button class="btn-primary" style="background:transparent;color:var(--red);margin-top:8px;box-shadow:none;" onclick="doLogout()">ออกจากระบบ</button>
+  </div>`;
+}
+async function viewSlip(path){
+  const w = window.open('', '_blank');
+  try {
+    const { data, error } = await supabaseClient.storage.from('payment-slips').createSignedUrl(path, 600);
+    if (error) throw error;
+    if (w) w.location.href = data.signedUrl; else window.location.href = data.signedUrl;
+  } catch (e) { if (w) w.close(); console.error(e); showToast('เปิดสลิปไม่สำเร็จ'); }
+}
+function cancelOrderSheetHtml(){
+  const o = cancelTarget ? [...state.newOrders, ...state.preparingOrders].find(x => x.id === cancelTarget.id) : null;
+  return `
+  <div class="sheet">
+    <div class="sheet-title"><h2>ยกเลิกออเดอร์${o ? ' #'+o.order_code : ''}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="f-label">เหตุผลที่ยกเลิก (จำเป็นต้องระบุ)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+      ${CANCEL_REASON_PRESETS.map(r => `<button class="btn-mini reject" style="margin:0;" onclick="pickCancelReason('${r.replace(/'/g,"\\'")}')">${r}</button>`).join('')}
+    </div>
+    <textarea id="cancel-reason-text" class="f-input" rows="3" placeholder="ระบุเหตุผล เช่น วัตถุดิบหมด ร้านปิดกะทันหัน ฯลฯ" style="resize:vertical;"></textarea>
+    <button class="btn-primary" style="background:var(--red,#C0392B);margin-top:10px;" onclick="confirmCancelOrder()">ยืนยันยกเลิกออเดอร์</button>
+  </div>`;
+}
+function optionGroupEditorHtml(){
+  return `
+    <div class="f-label" style="margin-top:22px;padding-top:14px;border-top:1px solid var(--border);">ตัวเลือกเพิ่มเติม (ความเผ็ด/ชนิดเนื้อ/ความหวาน/ขนาดแก้ว ฯลฯ)</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">กดปุ่มด้านล่างเพื่อเพิ่มกลุ่มตัวเลือกสำเร็จรูป หรือสร้างกลุ่มของคุณเองก็ได้ ลูกค้าจะเห็นตัวเลือกเหล่านี้ตอนกดสั่งเมนูนี้</div>
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:4px 0 6px;">🍜 สำหรับอาหาร</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('spice')">🌶️ + ระดับความเผ็ด</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('protein')">🐷 + ชนิดเนื้อ/วัตถุดิบ</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('egg')">🍳 + เพิ่มไข่</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('spoon')">🥄 + ช้อนพลาสติก</button>
+    </div>
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:4px 0 6px;">🥤 สำหรับเครื่องดื่ม</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('drinkType')">🧊 + ร้อน/เย็น/ปั่น</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('sweet')">🍯 + ระดับความหวาน</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('cupSize')">🥤 + ขนาดแก้ว</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('ice')">🧊 + น้ำแข็ง</button>
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;" onclick="addPresetGroup('drinkTopping')">⚫ + ท็อปปิ้ง</button>
+    </div>
+    <div style="margin-bottom:12px;">
+      <button type="button" class="btn-outline-mini" style="width:auto;margin:0;padding:7px 12px;background:var(--primary);color:var(--primary-ink);border-color:var(--primary);" onclick="addCustomGroup()">✨ + กลุ่มตัวเลือกของฉันเอง</button>
+    </div>
+    ${draftOptionGroups.map(g => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="og-name-${g._key}" class="f-input" style="flex:1;margin:0;font-weight:700;" placeholder="ชื่อกลุ่มตัวเลือก เช่น ขนาด / เพิ่มท็อปปิ้ง" value="${(g.name||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
+          <button type="button" class="btn-mini reject" style="flex:0 0 auto;padding:8px 10px;margin:0;" onclick="removeGroup('${g._key}')">🗑️</button>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px;">
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="type-${g._key}" ${g.selectType==='single'?'checked':''} onchange="setGroupType('${g._key}','single')"> เลือกได้ 1 ข้อ</label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="type-${g._key}" ${g.selectType==='multi'?'checked':''} onchange="setGroupType('${g._key}','multi')"> เลือกได้หลายข้อ</label>
+          ${g.selectType==='multi' ? `<label style="display:flex;align-items:center;gap:5px;">สูงสุด <input id="og-max-${g._key}" type="number" min="1" value="${g.maxSelect||1}" style="width:48px;border:1px solid var(--border);border-radius:6px;padding:3px 6px;" onchange="syncDraftFromDom()"> ข้อ</label>` : ''}
+          <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" ${g.required?'checked':''} onchange="setGroupRequired('${g._key}', this.checked)"> บังคับให้ลูกค้าเลือก</label>
+        </div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+          ${g.options.map(o => `
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input id="oo-emoji-${o._key}" class="f-input" style="width:52px;margin:0;padding:8px 4px;text-align:center;font-size:11px;" placeholder="ไอคอน" title="ไอคอน (ไม่ใส่ก็ได้)" value="${(o.emoji||'').replace(/"/g,'&quot;')}">
+              <input id="oo-name-${o._key}" class="f-input" style="flex:1;margin:0;" placeholder="ชื่อตัวเลือก เช่น ธรรมดา / พิเศษ" value="${(o.name||'').replace(/"/g,'&quot;')}">
+              <input id="oo-price-${o._key}" type="number" class="f-input" style="width:64px;margin:0;" placeholder="0" value="${o.price||0}">
+              <label style="display:flex;flex-direction:column;align-items:center;font-size:9.5px;color:var(--text-muted);white-space:nowrap;">หมด<input id="oo-avail-${o._key}" type="checkbox" ${o.available===false?'checked':''}></label>
+              <button type="button" class="btn-mini reject" style="flex:0 0 auto;padding:8px;margin:0;" onclick="removeOption('${g._key}','${o._key}')">✕</button>
+            </div>`).join('')}
+        </div>
+        <button type="button" class="btn-outline-mini" style="margin-top:8px;" onclick="addOption('${g._key}')">+ เพิ่มตัวเลือกในกลุ่มนี้</button>
+      </div>`).join('')}
+  `;
+}
+function addItemSheetHtml(){
+  const item = editingItemId ? state.menu.find(m => m.id === editingItemId) : null;
+  const previewSrc = draftImagePreviewDataUrl || (item && item.image_url) || '';
+  return `
+  <div class="sheet">
+    <div class="sheet-title"><h2>${editingItemId ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่'}</h2><button class="sheet-close" onclick="closeSheet()">✕</button></div>
+    <div class="f-label">รูปเมนู (ถ้ามี)</div>
+    <input id="mi-image" type="file" accept="image/*" class="f-input" onchange="previewImage(this)">
+    <img id="mi-preview" style="${previewSrc ? 'display:block;' : 'display:none;'}width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:8px;" src="${previewSrc}">
+    <div class="f-label">ชื่อเมนู</div><input id="mi-name" class="f-input" placeholder="เช่น ผัดไทยกุ้งสด" value="${(draftBaseFields.name||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
+    <div class="f-label">หมวดหมู่ในเมนู</div>
+    <select id="mi-group" class="f-input" onchange="syncDraftFromDom()">${(draftBaseFields.group && !MENU_GROUP_OPTIONS.includes(draftBaseFields.group) ? [draftBaseFields.group, ...MENU_GROUP_OPTIONS] : MENU_GROUP_OPTIONS).map(g => `<option value="${g}" ${draftBaseFields.group===g ? 'selected':''}>${g}</option>`).join('')}</select>
+    <div class="f-label">ราคา (บาท)</div><input id="mi-price" type="number" class="f-input" placeholder="65" value="${draftBaseFields.price!=null?draftBaseFields.price:''}" onchange="syncDraftFromDom()">
+    <div class="f-label">อิโมจิ (ใช้ถ้าไม่มีรูป)</div><input id="mi-emoji" class="f-input" placeholder="🍜" value="${(draftBaseFields.emoji||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
+    <div class="f-label">รายละเอียด</div><input id="mi-desc" class="f-input" placeholder="คำอธิบายสั้นๆ" value="${(draftBaseFields.desc||'').replace(/"/g,'&quot;')}" onchange="syncDraftFromDom()">
+    ${optionGroupEditorHtml()}
+    <button class="btn-primary" onclick="saveMenuItem()">${editingItemId ? 'บันทึกการแก้ไข' : 'บันทึกเมนู'}</button>
+  </div>`;
+}
+
+/* ============ หน้ากาก UI (Merchant Portal) ============ */
+let isAudioEnabled = true;
+let salesChartRef = null;
+function baht(n){ return '฿' + Number(n||0).toLocaleString('th-TH', { maximumFractionDigits: 2 }); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function toggleAudioAlert(){
+  isAudioEnabled = !isAudioEnabled;
+  showToast(isAudioEnabled ? '🔔 เปิดเสียงแจ้งเตือนออเดอร์' : '🔕 ปิดเสียงแจ้งเตือนออเดอร์');
+  if (isAudioEnabled) playAlertSound();
+  render();
+}
+function switchTab(tab){
+  state.tab = tab;
+  if (tab === 'analytics' || tab === 'orders') refreshStats().then(() => { if (state.tab === tab && !activeSheet) render(); });
+  render();
+  window.scrollTo(0, 0);
+}
+async function manualRefresh(){
+  await Promise.all([refreshOrders(), refreshMenu(), refreshStats()]);
+  render(); showToast('อัปเดตข้อมูลล่าสุดแล้ว');
+}
+/* re-render เฉพาะตอนอยู่หน้าออเดอร์ (กันช่องค้นหา/กราฟ/ไฟล์ที่เลือกไว้หายเวลา auto-refresh) */
+function softRender(){
+  if (activeSheet) return;
+  if (state.tab === 'orders') render();
+  else updateNavBadge();
+}
+function updateNavBadge(){
+  const b = document.getElementById('navOrderBadge');
+  if (!b) return;
+  const n = state.newOrders.length;
+  b.textContent = n; b.classList.toggle('hidden', n === 0);
+}
+
+/* ============ สรุปยอดขาย (คำนวณจากออเดอร์ที่ส่งสำเร็จ) ============ */
+const TH_DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์'];
+async function refreshStats(){
+  if (!supabaseClient || !state.restaurantId) return;
+  try {
+    const start = new Date(); start.setHours(0,0,0,0); start.setDate(start.getDate() - 6);
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('total,created_at,order_items(name,qty,price)')
+      .eq('restaurant_id', state.restaurantId)
+      .eq('status', 'delivered')
+      .gte('created_at', start.toISOString());
+    if (error) throw error;
+    const days = [], labels = [];
+    for (let i = 0; i < 7; i++){ const d = new Date(start); d.setDate(start.getDate() + i); days.push({ key: d.toDateString(), sales: 0, items: 0 }); labels.push(TH_DAYS[d.getDay()]); }
+    const prod = {};
+    (data||[]).forEach(o => {
+      const day = days.find(d => d.key === new Date(o.created_at).toDateString());
+      const qty = (o.order_items||[]).reduce((s,i) => s + (Number(i.qty)||0), 0);
+      if (day){ day.sales += Number(o.total)||0; day.items += qty; }
+      (o.order_items||[]).forEach(i => {
+        const p = prod[i.name] = prod[i.name] || { name: i.name, qty: 0, revenue: 0 };
+        p.qty += Number(i.qty)||0; p.revenue += (Number(i.price)||0) * (Number(i.qty)||0);
+      });
+    });
+    const today = days[6];
+    state.stats = {
+      loaded: true, labels, series: days.map(d => d.sales),
+      todaySales: today.sales, todayItems: today.items,
+      total7: days.reduce((s,d) => s + d.sales, 0), items7: days.reduce((s,d) => s + d.items, 0),
+      orders7: (data||[]).length,
+      top: Object.values(prod).sort((a,b) => b.qty - a.qty).slice(0, 5),
+    };
+  } catch (err) { console.warn('refreshStats failed', err); }
+}
+
+/* ============ ชิ้นส่วน UI ============ */
+function toggleHtml(checked, onchange, small){
+  const box = small
+    ? `w-7 h-4 after:h-3 after:w-3 peer-checked:after:translate-x-3`
+    : `w-10 h-6 after:h-5 after:w-5 peer-checked:after:translate-x-4`;
+  return `<label class="relative inline-flex items-center cursor-pointer shrink-0">
+    <input type="checkbox" class="sr-only peer" ${checked?'checked':''} onchange="${onchange}">
+    <div class="${box} bg-slate-300 rounded-full peer peer-checked:bg-brand-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:transition-all after:shadow"></div>
+  </label>`;
+}
+function headerHtml(){
+  const r = state.restaurant, isOpen = r.is_open !== false;
+  const logo = r.storefront_url
+    ? `<img src="${esc(r.storefront_url)}" alt="" class="w-11 h-11 rounded-full object-cover border-2 border-brand-500 shadow-sm">`
+    : `<div class="w-11 h-11 rounded-full bg-amber-100 border-2 border-brand-500 flex items-center justify-center text-xl">${r.emoji||'🏪'}</div>`;
+  return `
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="relative shrink-0">${logo}
+          <span class="absolute bottom-0 right-0 w-3.5 h-3.5 ${isOpen?'bg-brand-500':'bg-red-500'} border-2 border-white rounded-full"></span>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <h1 class="font-bold text-slate-800 text-base sm:text-lg leading-snug truncate max-w-[170px] sm:max-w-xs">${esc(r.name)}</h1>
+          </div>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            ${toggleHtml(isOpen, 'toggleOpenStatus()', true)}
+            <span class="font-semibold text-xs ${isOpen?'text-brand-600':'text-red-500'}">${isOpen?'เปิดร้านอยู่':'ปิดร้านชั่วคราว'}</span>
+          </div>
+        </div>
+      </div>
+      <div class="shrink-0">${connPillHtml()}</div>
+    </div>
+  </header>`;
+}
+function navHtml(){
+  const items = [
+    { id:'orders', icon:'shopping-bag', label:'ออเดอร์' },
+    { id:'menu', icon:'package-check', label:'สินค้าขายได้' },
+    { id:'analytics', icon:'bar-chart-2', label:'สรุป 7 วัน' },
+    { id:'settings', icon:'settings', label:'ตั้งค่าร้าน' },
+  ];
+  const n = state.newOrders.length;
+  return `
+  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 shadow-lg">
+    <div class="max-w-md mx-auto grid grid-cols-4 h-16">
+      ${items.map(it => `
+      <button onclick="switchTab('${it.id}')" class="${state.tab===it.id?'text-brand-600':'text-slate-400 hover:text-slate-600'} flex flex-col items-center justify-center gap-1 transition">
+        <div class="relative">
+          <i data-lucide="${it.icon}" class="w-5 h-5"></i>
+          ${it.id==='orders' ? `<span id="navOrderBadge" class="${n?'':'hidden'} absolute -top-1.5 -right-2 bg-red-500 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center">${n}</span>` : ''}
+        </div>
+        <span class="text-[11px] ${state.tab===it.id?'font-bold':'font-medium'}">${it.label}</span>
+      </button>`).join('')}
+    </div>
+  </nav>`;
+}
+function statCard(label, value, icon, tone, valueCls){
+  return `
+  <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+    <div><p class="text-[11px] text-slate-500 font-medium">${label}</p><p class="text-base sm:text-lg font-bold ${valueCls||'text-slate-800'}">${value}</p></div>
+    <div class="w-8 h-8 rounded-xl bg-${tone}-50 text-${tone}-${tone==='red'||tone==='orange'?'500':'600'} flex items-center justify-center"><i data-lucide="${icon}" class="w-4 h-4"></i></div>
+  </div>`;
+}
+function sectionHtml(dotCls, title, count, badgeCls, borderCls, inner, emptyText){
+  return `
+  <div class="bg-white rounded-2xl border ${borderCls} p-3 shadow-sm">
+    <div class="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+      <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full ${dotCls}"></span><h3 class="font-bold text-slate-800 text-sm">${title}</h3></div>
+      <span class="${badgeCls} text-white font-extrabold text-xs px-2 py-0.5 rounded-full">${count}</span>
+    </div>
+    <div class="space-y-3">${inner || `<p class="text-xs text-slate-400 text-center py-4">${emptyText}</p>`}</div>
+  </div>`;
+}
+
+/* ============ ใช้งานง่าย: เวลารอ / เสียงเตือนซ้ำ / จอไม่ดับ / สถานะการเชื่อมต่อ ============ */
+function elapsedMin(t){ return Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 60000)); }
+function elapsedText(t){
+  const m = elapsedMin(t);
+  if (m < 1) return 'เพิ่งสั่ง';
+  if (m < 60) return `รอ ${m} นาที`;
+  return `รอ ${Math.floor(m/60)} ชม. ${m%60} นาที`;
+}
+function elapsedCls(t, warnAt){
+  const m = elapsedMin(t);
+  return m >= warnAt ? 'bg-red-500 text-white' : (m >= Math.ceil(warnAt/2) ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600');
+}
+function elapsedBadge(o, warnAt){
+  return `<span class="js-elapsed text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${elapsedCls(o.created_at, warnAt)}" data-t="${o.created_at}" data-warn="${warnAt}">⏱ ${elapsedText(o.created_at)}</span>`;
+}
+/* อัปเดตตัวนับเวลาทุก 30 วิ โดยไม่ต้องวาดหน้าใหม่ */
+setInterval(() => {
+  document.querySelectorAll('.js-elapsed').forEach(el => {
+    el.textContent = '⏱ ' + elapsedText(el.dataset.t);
+    el.className = `js-elapsed text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${elapsedCls(el.dataset.t, Number(el.dataset.warn))}`;
+  });
+}, 30000);
+
+/* เสียงเตือนดังซ้ำทุก 12 วิ จนกว่าจะกดรับ/ปฏิเสธออเดอร์ใหม่ครบ (กันพลาดออเดอร์ตอนครัวยุ่ง) */
+setInterval(() => {
+  if (state.view === 'dashboard' && state.newOrders && state.newOrders.length > 0) {
+    playAlertSound();
+    try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch(e){}
+  }
+}, 12000);
+
+/* เบราว์เซอร์จะยอมให้มีเสียงหลังผู้ใช้แตะจอ 1 ครั้ง — ปลดล็อกเสียงที่การแตะครั้งแรก */
+function audioReady(){ return !!(sharedAudioCtx && sharedAudioCtx.state === 'running'); }
+function unlockAudio(){
+  try {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  } catch(e){}
+  setTimeout(() => { const b = document.getElementById('audio-unlock'); if (b && audioReady()) b.remove(); }, 150);
+}
+document.addEventListener('pointerdown', unlockAudio, { passive: true });
+function testSound(){ unlockAudio(); setTimeout(playAlertSound, 120); showToast('🔔 ทดสอบเสียงแจ้งเตือน'); }
+
+/* กันหน้าจอดับระหว่างเปิดรับออเดอร์ (รองรับ Chrome/Android/iOS ใหม่) */
+let wakeLock = null;
+async function keepScreenOn(){
+  try { if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch(e){}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.view === 'dashboard') { keepScreenOn(); refreshOrders().then(softRender); }
+});
+
+/* สถานะการเชื่อมต่อ (แสดงมุมขวาบน) */
+function setConn(v){
+  if (state.conn === v) return;
+  state.conn = v;
+  const el = document.getElementById('conn-pill');
+  if (el) el.outerHTML = connPillHtml();
+}
+function connPillHtml(){
+  const off = state.conn === 'off' || !navigator.onLine;
+  return off
+    ? `<span id="conn-pill" class="flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded-full"><span class="w-2 h-2 rounded-full bg-red-500"></span>ขาดการเชื่อมต่อ</span>`
+    : `<span id="conn-pill" class="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>ออนไลน์</span>`;
+}
+window.addEventListener('online', () => setConn('ok'));
+window.addEventListener('offline', () => setConn('off'));
+
+/* ============ การ์ดออเดอร์ ============ */
+/* kind: new | search | prep | ready | onway */
+const STEPS = ['รับออเดอร์', 'กำลังปรุง', 'อาหารพร้อม', 'ส่งถึงลูกค้า'];
+function stepBarHtml(kind){
+  const idx = { new:0, search:0, prep:1, ready:2, onway:3 }[kind];
+  return `
+  <div class="flex items-center gap-1 my-2">
+    ${STEPS.map((s, i) => `
+      <div class="flex-1 min-w-0">
+        <div class="h-1.5 rounded-full ${i < idx ? 'bg-brand-500' : (i === idx ? (kind==='new' ? 'bg-red-500' : 'bg-orange-400') : 'bg-slate-200')}"></div>
+        <p class="text-[10px] mt-0.5 truncate ${i === idx ? 'font-bold text-slate-800' : 'text-slate-400'}">${s}</p>
+      </div>`).join('')}
+  </div>`;
+}
+function optChip(name){
+  /* ตัวเลือกที่ขึ้นต้นด้วย "ไม่" (ไม่ใส่พริก / ไม่หวาน / ไม่รับช้อน) เป็นสีแดง ให้ครัวเห็นชัด */
+  const plain = String(name).replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').trim();
+  const neg = /^(ไม่|แยก|no\b)/i.test(plain);
+  return `<span class="inline-block text-[12px] leading-tight font-semibold rounded-md px-1.5 py-0.5 border ${neg ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-800 border-orange-200'}">${esc(name)}</span>`;
+}
+function orderCardHtml(o, kind, tagLabel, actionsHtml){
+  const isNew = kind === 'new';
+  const items = o.order_items || [];
+  const qtyTotal = items.reduce((s,i) => s + (Number(i.qty)||0), 0);
+  const time = new Date(o.created_at).toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+  const warnAt = { new:3, search:10, prep:20, ready:15, onway:40 }[kind];
+  const pay = o.payment_method === 'promptpay'
+    ? `<span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-md whitespace-nowrap">📲 ${o.payment_slip_url ? 'โอนพร้อมเพย์ (มีสลิป)' : 'พร้อมเพย์'}</span>${o.payment_slip_url
+        ? `<button onclick="viewSlip('${String(o.payment_slip_url).replace(/'/g, "\\'")}')" class="text-xs font-semibold text-brand-700 bg-white border border-brand-200 px-2 py-1 rounded-md">🧾 ดูสลิป</button>`
+        : `<span class="text-[11px] text-red-500 font-semibold">ยังไม่มีสลิป</span>`}`
+    : `<span class="text-xs font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md whitespace-nowrap">💵 เก็บเงินสด ${baht(o.total)}</span>`;
+  return `
+  <div class="${isNew ? 'bg-red-50/60 rounded-2xl border-2 border-red-400 p-3.5 order-alert-pulse' : 'bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm'}">
+    <div class="flex justify-between items-start gap-2">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-extrabold text-slate-900 text-lg leading-none">#${esc(o.order_code)}</span>
+          ${elapsedBadge(o, warnAt)}
+        </div>
+        <p class="text-xs text-slate-500 mt-1">สั่งเวลา ${time} น. • ${o.is_self_delivery ? '🛵 ร้านส่งเอง' : '🏍️ ไรเดอร์มารับ'}</p>
+      </div>
+      <button onclick="printOrder('${o.id}')" title="พิมพ์ใบออเดอร์" class="shrink-0 w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center"><i data-lucide="printer" class="w-5 h-5"></i></button>
+    </div>
+    ${stepBarHtml(kind)}
+    <div class="space-y-1 text-sm text-slate-800 bg-white p-3 rounded-xl border border-slate-200">
+      ${items.map(i => {
+        const opts = (i.selected_options||[]).map(so => so.optionName).filter(Boolean);
+        return `<div class="flex gap-2 py-1 border-b border-dashed border-slate-100 last:border-0"><span class="font-extrabold text-brand-700 text-base w-8 shrink-0">${i.qty}x</span><div class="min-w-0"><p class="font-bold leading-snug">${esc(i.name)}</p>${opts.length ? `<div class="flex flex-wrap gap-1 mt-1">${opts.map(optChip).join('')}</div>` : ''}</div></div>`;
+      }).join('')}
+      ${o.note ? `<div class="mt-1.5 text-xs font-semibold text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">📝 ลูกค้าฝาก: ${esc(o.note)}</div>` : ''}
+      <div class="pt-1.5 mt-1 border-t border-slate-100 flex justify-between font-bold text-slate-900">
+        <span class="text-sm">${qtyTotal} รายการ</span><span class="text-brand-600 text-base">${baht(o.total)}</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-1.5 flex-wrap mt-2">${pay}</div>
+    ${o.address ? `<p class="text-xs text-slate-500 flex gap-1 mt-1.5"><i data-lucide="map-pin" class="w-3.5 h-3.5 shrink-0 mt-px"></i><span>${esc(o.address)}</span></p>` : ''}
+    ${actionsHtml}
+  </div>`;
+}
+function infoLine(icon, text, tone){
+  return `<div class="mt-3 text-xs font-semibold ${tone} rounded-xl px-3 py-2.5 flex items-center gap-2"><i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i>${text}</div>`;
+}
+function bigBtn(onclick, cls, icon, label){
+  return `<button onclick="${onclick}" class="w-full py-3.5 ${cls} text-white font-bold rounded-xl text-base shadow-md transition active:scale-[.98] flex items-center justify-center gap-2"><i data-lucide="${icon}" class="w-5 h-5"></i>${label}</button>`;
+}
+function smallLink(onclick, label){
+  return `<button onclick="${onclick}" class="w-full mt-1.5 py-1.5 text-xs font-semibold text-slate-400 hover:text-red-500">${label}</button>`;
+}
+
+/* ============ TAB: ออเดอร์ ============ */
+function scrollToSec(id){ const el = document.getElementById(id); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' }); }
+function renderOrdersTab(){
+  const r = state.restaurant, isOpen = r.is_open !== false;
+  const nNew = state.newOrders.length;
+  const nPrep = state.searchingOrders.length + state.preparingOrders.length;
+  const nReady = state.readyOrders.length + state.pickedUpOrders.length;
+
+  const newInner = state.newOrders.map(o => orderCardHtml(o, 'new', '', `
+    <div class="grid grid-cols-3 gap-2 mt-3">
+      <button onclick="openCancelSheet('${o.id}','pending')" class="py-3.5 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm">ปฏิเสธ</button>
+      <button onclick="acceptOrder('${o.id}')" class="col-span-2 py-3.5 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl text-base shadow-md transition active:scale-[.98] flex items-center justify-center gap-2"><i data-lucide="check" class="w-5 h-5"></i>รับออเดอร์</button>
+    </div>`)).join('');
+
+  const prepInner =
+    state.preparingOrders.map(o => orderCardHtml(o, 'prep', '',
+      `<div class="mt-3">${bigBtn(`markReady('${o.id}')`, 'bg-orange-500 hover:bg-orange-600', 'chef-hat', 'ทำเสร็จแล้ว')}${smallLink(`openCancelSheet('${o.id}','preparing')`, 'ยกเลิกออเดอร์นี้')}</div>`)).join('') +
+    state.searchingOrders.map(o => orderCardHtml(o, 'search', '',
+      infoLine('search', 'กำลังหาไรเดอร์ให้… ยังไม่ต้องทำอาหาร ระบบจะดังเตือนเมื่อมีไรเดอร์รับงาน', 'bg-sky-50 text-sky-700'))).join('');
+
+  const readyInner =
+    state.readyOrders.map(o => o.is_self_delivery
+      ? orderCardHtml(o, 'ready', '', `<div class="mt-3">${bigBtn(`selfDispatch('${o.id}')`, 'bg-blue-600 hover:bg-blue-700', 'bike', 'ออกไปส่งแล้ว')}</div>`)
+      : orderCardHtml(o, 'ready', '', infoLine('bike', 'รอไรเดอร์มารับที่ร้าน — ไรเดอร์กดรับของแล้วออเดอร์จะหายไปเอง', 'bg-blue-50 text-blue-700'))
+    ).join('') +
+    state.pickedUpOrders.map(o => orderCardHtml(o, 'onway', '', `<div class="mt-3">${bigBtn(`selfDelivered('${o.id}')`, 'bg-slate-800 hover:bg-slate-900', 'check-circle-2', 'ส่งถึงลูกค้าแล้ว')}</div>`)).join('');
+
+  const chip = (sec, n, label, on, off) => `
+    <button onclick="scrollToSec('${sec}')" class="rounded-2xl p-3 text-left border ${n ? on : off}">
+      <p class="text-2xl font-black leading-none">${n}</p><p class="text-xs font-semibold mt-1">${label}</p>
+    </button>`;
+
+  const allEmpty = !nNew && !nPrep && !nReady;
+  return `
+  <section class="space-y-4">
+    ${!isOpen ? `
+    <div class="bg-red-600 text-white rounded-2xl p-4 flex items-center gap-3 shadow-md">
+      <i data-lucide="store" class="w-8 h-8 shrink-0 opacity-90"></i>
+      <div class="flex-1 min-w-0"><p class="font-bold">ร้านปิดอยู่</p><p class="text-xs text-red-100">ลูกค้าจะยังสั่งไม่ได้จนกว่าจะเปิดร้าน</p></div>
+      <button onclick="toggleOpenStatus()" class="shrink-0 bg-white text-red-600 font-bold px-4 py-2.5 rounded-xl text-sm">เปิดร้าน</button>
+    </div>` : ''}
+    ${!audioReady() ? `
+    <button id="audio-unlock" onclick="testSound()" class="w-full bg-amber-50 border-2 border-dashed border-amber-300 text-amber-800 rounded-2xl p-3 flex items-center gap-3 text-left">
+      <i data-lucide="volume-2" class="w-6 h-6 shrink-0"></i>
+      <span class="text-sm font-semibold">แตะตรงนี้ 1 ครั้ง เพื่อเปิดเสียงแจ้งเตือนออเดอร์</span>
+    </button>` : ''}
+
+    <div class="grid grid-cols-3 gap-2">
+      ${chip('sec-new', nNew, 'ออเดอร์ใหม่', 'bg-red-500 text-white border-red-500', 'bg-white text-slate-500 border-slate-200')}
+      ${chip('sec-prep', nPrep, 'กำลังทำ', 'bg-orange-500 text-white border-orange-500', 'bg-white text-slate-500 border-slate-200')}
+      ${chip('sec-ready', nReady, 'รอส่ง/กำลังส่ง', 'bg-blue-600 text-white border-blue-600', 'bg-white text-slate-500 border-slate-200')}
+    </div>
+
+    ${allEmpty ? `
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-sm">
+      <div class="text-5xl mb-2">🛎️</div>
+      <h3 class="font-bold text-slate-800">ยังไม่มีออเดอร์ตอนนี้</h3>
+      <p class="text-sm text-slate-500 mt-1">เปิดหน้านี้ทิ้งไว้ได้เลย ออเดอร์ใหม่จะ<b>ดังเตือน</b>และขึ้นที่นี่ทันที</p>
+      <div class="grid grid-cols-4 gap-1 mt-5 text-[11px] text-slate-600">
+        ${[['🛎️','ออเดอร์เข้า'],['✅','กดรับ'],['👨‍🍳','ทำเสร็จ'],['🛵','ส่งออก']].map(([e,t], i) => `<div><div class="text-2xl">${e}</div><p class="font-semibold mt-1">${i+1}. ${t}</p></div>`).join('')}
+      </div>
+    </div>` : `
+    <div id="sec-new">${sectionHtml(`bg-red-500 ${nNew?'animate-ping':''}`, '1. ออเดอร์ใหม่ — กดรับก่อน', nNew, 'bg-red-500', nNew ? 'border-red-200' : 'border-slate-200', newInner, state.restaurant.self_delivery_enabled ? 'ไม่มีออเดอร์ใหม่' : 'ร้านใช้ไรเดอร์ภายนอก ออเดอร์จะไปขึ้นที่ "กำลังทำ" เมื่อไรเดอร์รับงาน')}</div>
+    <div id="sec-prep">${sectionHtml('bg-orange-500', '2. กำลังทำอาหาร', nPrep, 'bg-orange-500', 'border-slate-200', prepInner, 'ไม่มีออเดอร์ที่กำลังทำ')}</div>
+    <div id="sec-ready">${sectionHtml('bg-blue-500', '3. รอส่ง / กำลังส่ง', nReady, 'bg-blue-500', 'border-slate-200', readyInner, 'ไม่มีออเดอร์ที่รอส่ง')}</div>`}
+  </section>`;
+}
+
+/* ============ TAB: สินค้าขายได้ (จัดการเมนู) ============ */
+function setMenuFilter(f){ state.menuFilter = f; render(); }
+function applyMenuFilters(){
+  const input = document.getElementById('productSearch');
+  const q = (input ? input.value : '').trim().toLowerCase();
+  state.menuQuery = input ? input.value : '';
+  const f = state.menuFilter || 'all';
+  document.querySelectorAll('.product-item').forEach(el => {
+    const okQ = !q || el.dataset.name.includes(q);
+    const okF = f === 'all' || el.dataset.status === f;
+    el.classList.toggle('hidden', !(okQ && okF));
+  });
+}
+function renderMenuTab(){
+  const f = state.menuFilter || 'all';
+  const inCnt = state.menu.filter(m => m.is_available).length;
+  const outCnt = state.menu.length - inCnt;
+  const fBtn = (id, label) => `<button onclick="setMenuFilter('${id}')" class="px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap ${f===id ? 'bg-brand-500 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${label}</button>`;
+  const cards = state.menu.map(m => {
+    const thumb = m.image_url
+      ? `<img src="${esc(m.image_url)}" class="w-20 h-20 rounded-xl object-cover shrink-0 ${m.is_available?'':'grayscale'}">`
+      : `<div class="w-20 h-20 rounded-xl bg-slate-100 flex items-center justify-center text-3xl shrink-0 ${m.is_available?'':'grayscale opacity-60'}">${m.emoji||'🍽️'}</div>`;
+    const optCnt = m.menu_item_option_groups ? m.menu_item_option_groups.length : 0;
+    return `
+    <div class="product-item bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex gap-3 items-center" data-status="${m.is_available?'instock':'outstock'}" data-name="${esc((m.name||'').toLowerCase())}">
+      ${thumb}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">${esc(m.group_name||'เมนู')}</span>
+          ${optCnt ? `<span class="text-[10px] text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded font-semibold">🧩 ${optCnt} ตัวเลือก</span>` : ''}
+        </div>
+        <h3 class="font-bold text-slate-800 text-sm truncate mt-0.5">${esc(m.name)}</h3>
+        <p class="text-xs font-extrabold text-brand-600">${baht(m.price)}</p>
+        ${m.description ? `<p class="text-[11px] text-slate-500 mt-0.5 truncate">${esc(m.description)}</p>` : ''}
+        <div class="flex gap-1.5 mt-1.5">
+          <button onclick="openEditItemSheet('${m.id}')" class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1"><i data-lucide="pencil" class="w-3 h-3"></i>แก้ไข</button>
+          <button onclick="deleteMenuItem('${m.id}')" class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center gap-1"><i data-lucide="trash-2" class="w-3 h-3"></i>ลบ</button>
+        </div>
+      </div>
+      <div class="flex flex-col items-end gap-2 shrink-0">
+        ${toggleHtml(m.is_available, `toggleMenuItem('${m.id}', ${!!m.is_available})`)}
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${m.is_available ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}">${m.is_available ? 'พร้อมขาย' : 'สินค้าหมด'}</span>
+      </div>
+    </div>`;
+  }).join('');
+  return `
+  <section class="space-y-4">
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 class="font-bold text-slate-800 text-base">รายการสินค้าที่ขายได้</h2>
+          <p class="text-xs text-slate-500">เปิด/ปิดการขาย แก้ไขราคา รูป และตัวเลือกเมนู</p>
+        </div>
+        <button onclick="openAddItemSheet()" class="px-3.5 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5 shrink-0"><i data-lucide="plus" class="w-4 h-4"></i> เพิ่มสินค้า</button>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-100">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2 text-slate-400"></i>
+          <input type="text" id="productSearch" oninput="applyMenuFilters()" value="${esc(state.menuQuery||'')}" placeholder="ค้นชื่อสินค้า..." class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500">
+        </div>
+        <div class="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          ${fBtn('all', `ทั้งหมด (${state.menu.length})`)}${fBtn('instock', `พร้อมขาย (${inCnt})`)}${fBtn('outstock', `สินค้าหมด (${outCnt})`)}
+        </div>
+      </div>
+    </div>
+    ${state.menu.length === 0
+      ? `<div class="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center"><div class="text-4xl mb-2">🍽️</div><h3 class="font-bold text-slate-800 text-sm">ยังไม่มีเมนู</h3><p class="text-xs text-slate-500 mt-1">กด "เพิ่มสินค้า" เพื่อเพิ่มเมนูแรกของร้าน (ใส่รูปได้เลย)</p></div>`
+      : `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>`}
+  </section>`;
+}
+
+/* ============ TAB: สรุป 7 วัน ============ */
+function renderAnalyticsTab(){
+  const s = state.stats;
+  if (!s || !s.loaded) return `<div class="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">⏳ กำลังโหลดสรุปยอดขาย...</div>`;
+  const rankTone = ['bg-amber-100 text-amber-700','bg-slate-100 text-slate-600','bg-orange-100 text-orange-700','bg-slate-100 text-slate-500','bg-slate-100 text-slate-500'];
+  return `
+  <section class="space-y-4">
+    <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 rounded-2xl shadow-md">
+      <div class="flex justify-between items-start gap-2">
+        <div>
+          <span class="text-xs text-slate-400 font-medium">สรุปยอดขายรวม 7 วันย้อนหลัง</span>
+          <h2 class="text-3xl font-black text-emerald-400 mt-0.5">${baht(s.total7)}</h2>
+          <p class="text-xs text-slate-300 mt-1 flex items-center gap-1"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i> รับเงินเต็ม 100% ไม่มีหักค่าคอมมิชชั่น</p>
+        </div>
+        <div class="flex flex-col items-end gap-1.5 shrink-0">
+          <span class="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs px-2.5 py-1 rounded-full font-bold">รวม ${s.items7} ชิ้น</span>
+          <span class="text-[11px] text-slate-400">${s.orders7} ออเดอร์สำเร็จ</span>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <h3 class="font-bold text-slate-800 text-sm mb-3">แนวโน้มยอดขายรายวัน</h3>
+      <div class="h-56"><canvas id="salesChart7Days"></canvas></div>
+    </div>
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <h3 class="font-bold text-slate-800 text-sm mb-3">อันดับสินค้าขายดีในรอบ 7 วัน</h3>
+      ${s.top.length === 0 ? `<p class="text-xs text-slate-400 text-center py-4">ยังไม่มีออเดอร์ที่ส่งสำเร็จในช่วงนี้</p>` : `
+      <div class="space-y-3">
+        ${s.top.map((p, i) => `
+        <div class="flex items-center justify-between text-xs ${i < s.top.length-1 ? 'pb-2 border-b border-slate-100' : ''}">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="w-6 h-6 rounded-full ${rankTone[i]} font-bold flex items-center justify-center shrink-0">${i+1}</span>
+            <p class="font-bold text-slate-800 truncate">${esc(p.name)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="font-extrabold text-slate-800">${p.qty} ชิ้น</p>
+            <p class="text-[11px] text-emerald-600 font-semibold">${baht(p.revenue)}</p>
+          </div>
+        </div>`).join('')}
+      </div>`}
+    </div>
+  </section>`;
+}
+function drawSalesChart(){
+  const cv = document.getElementById('salesChart7Days');
+  if (!cv || typeof Chart === 'undefined' || !state.stats) return;
+  if (salesChartRef) { try { salesChartRef.destroy(); } catch(e){} salesChartRef = null; }
+  salesChartRef = new Chart(cv.getContext('2d'), {
+    type: 'line',
+    data: { labels: state.stats.labels, datasets: [{
+      label: 'ยอดขาย (บาท)', data: state.stats.series,
+      borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.3, borderWidth: 3, pointBackgroundColor: '#10b981',
+    }]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } } },
+  });
+}
+
+/* ============ TAB: ตั้งค่าร้าน ============ */
+function renderSettingsTab(){
+  const r = state.restaurant, isOpen = r.is_open !== false;
+  const row = (icon, tone, title, sub, right) => `
+    <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+      <div class="w-9 h-9 rounded-xl bg-${tone}-50 text-${tone}-600 flex items-center justify-center shrink-0"><i data-lucide="${icon}" class="w-4 h-4"></i></div>
+      <div class="flex-1 min-w-0"><p class="font-bold text-slate-800 text-sm">${title}</p><p class="text-[11px] text-slate-500">${sub}</p></div>
+      ${right}
+    </div>`;
+  const statusLabel = r.status === 'suspended' ? 'ถูกระงับ' : (r.status === 'pending' ? 'รออนุมัติ' : 'อนุมัติแล้ว');
+  return `
+  <section class="space-y-4">
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div><h2 class="font-bold text-slate-800 text-base">ตั้งค่าร้านค้า</h2><p class="text-xs text-slate-500">สถานะร้านและวิธีจัดส่ง มีผลกับลูกค้าทันที</p></div>
+        <span class="inline-flex items-center gap-1 ${isOpen?'bg-emerald-100 text-emerald-800':'bg-red-100 text-red-700'} text-xs font-bold px-2.5 py-1 rounded-full shrink-0">
+          <span class="w-2 h-2 rounded-full ${isOpen?'bg-emerald-500':'bg-red-500'}"></span>${isOpen?'เปิดบริการอยู่':'ปิดอยู่'}
+        </span>
+      </div>
+      ${row('store', isOpen?'emerald':'red', isOpen ? 'ร้านเปิดอยู่' : 'ร้านปิดอยู่', isOpen ? 'ลูกค้าเห็นเมนูและสั่งได้' : 'ลูกค้าจะไม่เห็นร้านจนกว่าจะเปิด', toggleHtml(isOpen, 'toggleOpenStatus()'))}
+      ${row('bike', r.self_delivery_enabled?'emerald':'blue', r.self_delivery_enabled ? 'จัดส่งเองโดยทางร้าน' : 'ใช้บริการไรเดอร์ภายนอก', r.self_delivery_enabled ? 'ลูกค้าเห็นป้ายส่งฟรี ค่าส่ง ฿0' : 'ระบบหาไรเดอร์ให้อัตโนมัติเมื่อมีออเดอร์', toggleHtml(!!r.self_delivery_enabled, 'toggleSelfDelivery()'))}
+    </div>
+
+    ${scheduleCardHtml()}
+
+    ${printerCardHtml()}
+
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <h3 class="font-bold text-slate-800 text-sm mb-3">รูปหน้าร้าน (cover)</h3>
+      <div class="flex items-center gap-3">
+        ${r.storefront_url ? `<img src="${esc(r.storefront_url)}" class="w-20 h-20 rounded-xl object-cover shrink-0">` : `<div class="w-20 h-20 rounded-xl bg-slate-100 flex items-center justify-center text-3xl shrink-0">${r.emoji||'🏪'}</div>`}
+        <div class="flex-1 min-w-0">
+          <p class="text-[11px] text-slate-500 mb-2">ลูกค้าเห็นรูปนี้ในหน้าแรกและหน้าร้านของคุณ</p>
+          <label class="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-50 text-brand-700 border border-brand-100 rounded-xl text-xs font-bold cursor-pointer hover:bg-brand-100">
+            <i data-lucide="image-up" class="w-4 h-4"></i> เปลี่ยนรูป
+            <input id="storefront-update-input" type="file" accept="image/*" class="hidden" onchange="updateStorefrontPhoto()">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <h3 class="font-bold text-slate-800 text-sm mb-3">ข้อมูลร้าน</h3>
+      <dl class="text-xs space-y-2">
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">สถานะบัญชี</dt><dd class="font-semibold text-emerald-700">${statusLabel}</dd></div>
+        ${r.phone ? `<div class="flex justify-between gap-3"><dt class="text-slate-500">เบอร์โทรร้าน</dt><dd class="font-semibold">${esc(r.phone)}</dd></div>` : ''}
+        ${r.promptpay_id ? `<div class="flex justify-between gap-3"><dt class="text-slate-500">พร้อมเพย์</dt><dd class="font-semibold">${esc(r.promptpay_id)}</dd></div>` : ''}
+        ${r.address ? `<div class="flex justify-between gap-3"><dt class="text-slate-500 shrink-0">ที่อยู่</dt><dd class="font-semibold text-right">${esc(r.address)}</dd></div>` : ''}
+      </dl>
+    </div>
+
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="font-bold text-slate-800 text-sm">เสียงแจ้งเตือน</h3>
+        <button onclick="testSound()" class="px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1.5"><i data-lucide="volume-2" class="w-4 h-4"></i> ทดสอบเสียง</button>
+      </div>
+      <p class="text-[11px] text-slate-500 leading-relaxed">มีออเดอร์ใหม่ เครื่องจะ<b>ดังซ้ำทุก 12 วินาที</b>และสั่น จนกว่าจะกดรับหรือปฏิเสธ • เปิดเสียงเครื่องให้ดังไว้ และเปิดหน้าแอปค้างไว้ (ระบบกันจอดับให้แล้ว)</p>
+    </div>
+
+    <details class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm group">
+      <summary class="font-bold text-slate-800 text-sm cursor-pointer list-none flex items-center justify-between">📖 วิธีใช้งานแบบง่าย <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i></summary>
+      <ol class="mt-3 space-y-2.5 text-xs text-slate-600">
+        <li><b class="text-slate-800">1. ออเดอร์เข้า</b> — เครื่องดัง การ์ดสีแดงขึ้นบนสุด ดูรายการแล้วกด <b class="text-brand-600">รับออเดอร์</b> (ถ้าทำไม่ได้กด ปฏิเสธ แล้วเลือกเหตุผล)</li>
+        <li><b class="text-slate-800">2. ทำอาหาร</b> — ทำเสร็จกด <b class="text-orange-600">ทำเสร็จแล้ว</b></li>
+        <li><b class="text-slate-800">3. ส่งอาหาร</b> — ถ้าใช้ไรเดอร์ รอไรเดอร์มารับได้เลย • ถ้าร้านส่งเอง กด <b class="text-blue-600">ออกไปส่งแล้ว</b> และเมื่อถึงมือลูกค้ากด <b>ส่งถึงลูกค้าแล้ว</b></li>
+        <li><b class="text-slate-800">เมนูหมด</b> — ไปแท็บ "สินค้าขายได้" แล้วปิดสวิตช์เมนูนั้น ลูกค้าจะสั่งไม่ได้ทันที</li>
+        <li><b class="text-slate-800">ปิดร้านชั่วคราว</b> — กดสวิตช์ใต้ชื่อร้านด้านบน</li>
+        <li><b class="text-slate-800">ตัวเลข ⏱</b> บนการ์ด คือเวลาที่ลูกค้ารอ ถ้าเป็น <span class="text-red-600 font-bold">สีแดง</span> แปลว่ารอนานแล้ว ควรรีบทำ</li>
+      </ol>
+    </details>
+
+    <button onclick="doLogout()" class="w-full py-3 bg-white border border-red-200 text-red-600 font-bold rounded-xl text-xs shadow-sm hover:bg-red-50 flex items-center justify-center gap-1.5">
+      <i data-lucide="log-out" class="w-4 h-4"></i> ออกจากระบบ
+    </button>
+  </section>`;
+}
+
+/* ============ ตั้งเวลาเปิด-ปิดร้าน (จันทร์-อาทิตย์) ============ */
+const DAY_ORDER = [1,2,3,4,5,6,0];
+const DAY_FULL = { 0:'วันอาทิตย์', 1:'วันจันทร์', 2:'วันอังคาร', 3:'วันพุธ', 4:'วันพฤหัสบดี', 5:'วันศุกร์', 6:'วันเสาร์' };
+function getHours(){
+  const saved = (state.restaurant && state.restaurant.opening_hours) || {};
+  const days = {};
+  DAY_ORDER.forEach(d => {
+    const s = (saved.days || {})[d] || {};
+    days[d] = { open: s.open !== undefined ? !!s.open : true, from: s.from || '09:00', to: s.to || '20:00' };
+  });
+  return { auto: !!saved.auto, days };
+}
+function toMin(t){ const [h,m] = String(t||'0:0').split(':').map(Number); return (h||0)*60 + (m||0); }
+/* อยู่ในเวลาทำการไหม (รองรับปิดข้ามเที่ยงคืน เช่น 18:00–02:00) */
+function isWithinHours(h, now){
+  now = now || new Date();
+  const cur = now.getHours()*60 + now.getMinutes();
+  const today = h.days[now.getDay()], yest = h.days[(now.getDay()+6) % 7];
+  if (today.open){
+    const f = toMin(today.from), t = toMin(today.to);
+    if (f < t ? (cur >= f && cur < t) : cur >= f) return true;
+  }
+  if (yest.open){
+    const f = toMin(yest.from), t = toMin(yest.to);
+    if (f >= t && cur < t) return true;
+  }
+  return false;
+}
+function onScheduleDayToggle(d, cb){
+  const row = document.getElementById('sh-row-' + d);
+  if (!row) return;
+  row.classList.toggle('opacity-60', !cb.checked);
+  document.getElementById('sh-times-' + d).classList.toggle('hidden', !cb.checked);
+  document.getElementById('sh-off-' + d).classList.toggle('hidden', cb.checked);
+}
+function scheduleCardHtml(){
+  const h = getHours();
+  const now = new Date(), td = h.days[now.getDay()];
+  return `
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <div class="flex items-start justify-between gap-2 pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="font-bold text-slate-800 text-sm">ตั้งเวลาเปิด-ปิดร้าน (รายวัน)</h3>
+          <p class="text-[11px] text-slate-500">วันนี้: ${td.open ? `${td.from} – ${td.to} น.` : 'วันหยุด'}</p>
+        </div>
+        <label class="flex items-center gap-2 text-[11px] font-semibold text-slate-600 shrink-0">
+          เปิด-ปิดอัตโนมัติ
+          <span class="relative inline-flex items-center cursor-pointer">
+            <input id="sh-auto" type="checkbox" class="sr-only peer" ${h.auto?'checked':''}>
+            <span class="w-10 h-6 bg-slate-300 rounded-full peer peer-checked:bg-brand-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow peer-checked:after:translate-x-4"></span>
+          </span>
+        </label>
+      </div>
+      <div class="mt-3 space-y-2">
+        ${DAY_ORDER.map(d => { const x = h.days[d]; return `
+        <div id="sh-row-${d}" class="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl border text-xs ${x.open ? 'bg-slate-50 border-slate-200' : 'bg-slate-50 border-slate-200 opacity-60'}">
+          <label class="flex items-center gap-2 shrink-0 cursor-pointer">
+            <input id="sh-open-${d}" type="checkbox" class="w-4 h-4 accent-emerald-500" ${x.open?'checked':''} onchange="onScheduleDayToggle(${d}, this)">
+            <span class="font-bold ${d===0?'text-red-600':'text-slate-800'}">${DAY_FULL[d]}</span>
+          </label>
+          <span id="sh-off-${d}" class="text-[11px] text-red-500 font-semibold ${x.open?'hidden':''}">ปิด (วันหยุด)</span>
+          <div id="sh-times-${d}" class="flex items-center gap-1 min-w-0 ${x.open?'':'hidden'}">
+            <input id="sh-from-${d}" type="time" value="${x.from}" class="border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white min-w-0 w-[6.5rem]">
+            <span class="text-slate-400">–</span>
+            <input id="sh-to-${d}" type="time" value="${x.to}" class="border border-slate-300 rounded-lg px-1 py-1 text-xs bg-white min-w-0 w-[6.5rem]">
+          </div>
+        </div>`; }).join('')}
+      </div>
+      <p class="text-[11px] text-slate-500 mt-3">เมื่อเปิด "เปิด-ปิดอัตโนมัติ" ร้านจะเปิด/ปิดรับออเดอร์เองตามเวลาด้านบน <b>แม้ปิดแอปหรือปิดเครื่อง</b> และยังกดเปิด/ปิดเองชั่วคราวได้ตามปกติ</p>
+      <button id="sh-save-btn" onclick="saveSchedule()" class="w-full mt-3 py-3 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl text-xs shadow-md transition">บันทึกตารางเวลาทำการ</button>
+    </div>`;
+}
+async function saveSchedule(){
+  const days = {};
+  for (const d of DAY_ORDER){
+    const open = document.getElementById('sh-open-' + d).checked;
+    const from = document.getElementById('sh-from-' + d).value;
+    const to = document.getElementById('sh-to-' + d).value;
+    if (open && (!from || !to)) { showToast(`กรอกเวลาเปิด-ปิดของ${DAY_FULL[d]}ให้ครบ`); return; }
+    if (open && from === to) { showToast(`เวลาเปิดและปิดของ${DAY_FULL[d]}ต้องไม่เท่ากัน`); return; }
+    days[d] = { open, from: from || '09:00', to: to || '20:00' };
+  }
+  const payload = { auto: document.getElementById('sh-auto').checked, days };
+  const btn = document.getElementById('sh-save-btn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+  try {
+    const { error } = await supabaseClient.from('restaurants').update({ opening_hours: payload }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.opening_hours = payload;
+    lastScheduleWithin = null; // ให้เช็คเวลาใหม่ทันที
+    showToast('บันทึกเวลาทำการจันทร์-อาทิตย์เรียบร้อยแล้ว');
+    await checkAutoSchedule();
+    render();
+  } catch (err) {
+    console.error(err); showToast('บันทึกเวลาไม่สำเร็จ: ' + (err.message||''));
+    if (btn) { btn.disabled = false; btn.textContent = 'บันทึกตารางเวลาทำการ'; }
+  }
+}
+/* เปิด/ปิดร้านอัตโนมัติทำงานฝั่งเซิร์ฟเวอร์ทุกนาที (ไม่ต้องเปิดแอปค้าง)
+   ฟังก์ชันนี้ใช้ตอนกด "บันทึก" เพื่อปรับสถานะร้านให้ตรงกับเวลาตอนนี้ทันที */
+let lastScheduleWithin = null;
+async function checkAutoSchedule(){
+  if (state.view !== 'dashboard' || !state.restaurant) return;
+  const h = getHours();
+  if (!h.auto) { lastScheduleWithin = null; return; }
+  const within = isWithinHours(h);
+  const isOpen = state.restaurant.is_open !== false;
+  if (isOpen === within) return;
+  try {
+    const { error } = await supabaseClient.from('restaurants').update({ is_open: within }).eq('id', state.restaurantId);
+    if (error) throw error;
+    state.restaurant.is_open = within;
+    showToast(within ? '⏰ ถึงเวลาเปิดร้าน — เปิดรับออเดอร์อัตโนมัติแล้ว' : '⏰ หมดเวลาทำการ — ปิดรับออเดอร์อัตโนมัติแล้ว');
+    if (!activeSheet && state.tab !== 'menu') render();
+  } catch (err) { console.warn('auto schedule failed', err); }
+}
+
+/* ============ พิมพ์ใบออเดอร์ (เครื่องพิมพ์ใบเสร็จ 58/80 มม. หรือเครื่องพิมพ์ทั่วไป) ============ */
+function lsGet(k, d){ try { const v = localStorage.getItem(k); return v === null ? d : v; } catch(e){ return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+function getPaperSize(){ return lsGet('imduan_paper', '58'); }
+function isAutoPrint(){ return lsGet('imduan_autoprint', '0') === '1'; }
+function setPaperSize(v){ lsSet('imduan_paper', v); showToast(`ตั้งขนาดกระดาษ ${v} มม. แล้ว`); render(); }
+function toggleAutoPrint(){ lsSet('imduan_autoprint', isAutoPrint() ? '0' : '1'); showToast(isAutoPrint() ? '🖨️ เปิดพิมพ์อัตโนมัติเมื่อกดรับออเดอร์' : 'ปิดพิมพ์อัตโนมัติแล้ว'); render(); }
+function findOrder(id){
+  if (id === '__test') return state.__printTest;
+  return [...state.newOrders, ...state.searchingOrders, ...state.preparingOrders, ...state.readyOrders, ...state.pickedUpOrders].find(o => o.id === id);
+}
+function noEmoji(t){ return String(t||'').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s+/g,' ').trim(); }
+function receiptHtml(o){
+  const r = state.restaurant || {};
+  const w = getPaperSize() === '80' ? '72mm' : '48mm';
+  const fs = getPaperSize() === '80' ? '13px' : '11.5px';
+  const d = new Date(o.created_at);
+  const items = (o.order_items||[]).map(i => {
+    const opts = (i.selected_options||[]).map(so => noEmoji(so.optionName)).filter(Boolean);
+    return `<tr><td class="q">${i.qty}x</td><td>${esc(i.name)}${opts.length ? `<div class="opt">- ${opts.map(esc).join('<br>- ')}</div>` : ''}</td></tr>`;
+  }).join('');
+  const qty = (o.order_items||[]).reduce((s,i) => s + (Number(i.qty)||0), 0);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>#${esc(o.order_code)}</title>
+  <style>
+    @page { size: ${getPaperSize()}mm auto; margin: 0; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:3mm; width:${w}; font-family:'Kanit','Noto Sans Thai',Tahoma,sans-serif; font-size:${fs}; color:#000; line-height:1.35; }
+    .c { text-align:center; } .b { font-weight:700; }
+    .big { font-size:1.9em; font-weight:800; letter-spacing:.5px; }
+    hr { border:none; border-top:1px dashed #000; margin:6px 0; }
+    table { width:100%; border-collapse:collapse; } td { vertical-align:top; padding:2px 0; }
+    td.q { width:2.6em; font-weight:700; } .opt { font-size:.88em; padding-left:4px; }
+    .row { display:flex; justify-content:space-between; gap:6px; }
+    .box { border:1.5px solid #000; padding:4px; margin-top:6px; }
+  </style></head><body>
+    <div class="c b" style="font-size:1.15em">${esc(r.name||'')}</div>
+    ${r.phone ? `<div class="c">โทร ${esc(r.phone)}</div>` : ''}
+    <hr>
+    <div class="c">เลขออเดอร์</div>
+    <div class="c big">#${esc(o.order_code)}</div>
+    <div class="c">${d.toLocaleDateString('th-TH')} ${d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.</div>
+    <div class="c b">${o.is_self_delivery ? 'ร้านจัดส่งเอง' : 'ไรเดอร์มารับ'}</div>
+    <hr>
+    <table>${items}</table>
+    ${o.note ? `<div class="box"><b>หมายเหตุ:</b> ${esc(o.note)}</div>` : ''}
+    <hr>
+    <div class="row"><span>จำนวน</span><span>${qty} รายการ</span></div>
+    <div class="row b" style="font-size:1.2em"><span>รวมทั้งหมด</span><span>${Number(o.total||0).toLocaleString('th-TH')} บาท</span></div>
+    <div class="row"><span>ชำระเงิน</span><span class="b">${o.payment_method === 'promptpay' ? 'โอนพร้อมเพย์' : 'เงินสดปลายทาง'}</span></div>
+    ${o.address ? `<hr><div><b>ส่งที่:</b> ${esc(o.address)}</div>` : ''}
+    <hr>
+    <div class="c">ขอบคุณที่ใช้บริการ อิ่มด่วน</div>
+    <div style="height:8mm"></div>
+  </body></html>`;
+}
+function printOrder(id){
+  const o = findOrder(id);
+  if (!o) { showToast('ไม่พบออเดอร์นี้'); return; }
+  let f = document.getElementById('print-frame');
+  if (f) f.remove();
+  f = document.createElement('iframe');
+  f.id = 'print-frame';
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(f);
+  const doc = f.contentWindow.document;
+  doc.open(); doc.write(receiptHtml(o)); doc.close();
+  setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch(e){ console.error(e); showToast('สั่งพิมพ์ไม่สำเร็จ'); } }, 300);
+}
+function printTest(){
+  const demo = { id:'__test', order_code:'TEST', created_at:new Date().toISOString(), is_self_delivery:false, total:120, payment_method:'cash', note:'ทดสอบเครื่องพิมพ์', address:'',
+    order_items:[{ name:'ตัวอย่างเมนู', qty:2, price:50, selected_options:[{ optionName:'เผ็ดน้อย' }] }, { name:'น้ำเปล่า', qty:1, price:20 }] };
+  state.__printTest = demo; printOrder('__test');
+}
+function printBtn(id){
+  return `<button onclick="printOrder('${id}')" title="พิมพ์ใบออเดอร์" class="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1"><i data-lucide="printer" class="w-3 h-3"></i>พิมพ์</button>`;
+}
+function printerCardHtml(){
+  const p = getPaperSize();
+  const opt = (v, label) => `<button onclick="setPaperSize('${v}')" class="flex-1 py-2 rounded-xl text-xs font-bold border ${p===v ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">${label}</button>`;
+  return `
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-center gap-2"><i data-lucide="printer" class="w-4 h-4 text-slate-600"></i><h3 class="font-bold text-slate-800 text-sm">เครื่องพิมพ์ใบออเดอร์</h3></div>
+      <div>
+        <p class="text-[11px] text-slate-500 mb-1.5">ขนาดกระดาษ</p>
+        <div class="flex gap-2">${opt('58','58 มม. (เล็ก)')}${opt('80','80 มม. (ใหญ่)')}</div>
+      </div>
+      <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <div class="flex-1 min-w-0"><p class="font-bold text-slate-800 text-sm">พิมพ์อัตโนมัติเมื่อกดรับออเดอร์</p><p class="text-[11px] text-slate-500">กด "รับออเดอร์" แล้วเด้งหน้าพิมพ์ให้ทันที</p></div>
+        ${toggleHtml(isAutoPrint(), 'toggleAutoPrint()')}
+      </div>
+      <button onclick="printTest()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"><i data-lucide="printer" class="w-4 h-4"></i> ทดสอบพิมพ์</button>
+      <p class="text-[11px] text-slate-500 leading-relaxed">ใช้ได้กับเครื่องพิมพ์ที่เชื่อมกับเครื่องนี้แล้ว (USB / Wi-Fi / Bluetooth) • บนมือถือ Android แนะนำแอป <b>RawBT</b> สำหรับเครื่องพิมพ์ใบเสร็จบลูทูธ • ปุ่ม "พิมพ์" อยู่บนการ์ดออเดอร์ทุกใบ</p>
+    </div>`;
+}
+
+/* หน้าก่อนเข้าระบบ (ล็อกอิน/สมัคร/รออนุมัติ) ครอบด้วยแบนเนอร์ของหน้ากาก */
+function guestShell(inner){
+  return `
+  <div class="max-w-lg mx-auto pb-10">${inner}</div>`;
+}
+
+function render(){
+  const app = document.getElementById('app');
+  const done = () => { if (window.lucide) lucide.createIcons(); };
+  if (state.view === 'loading') { app.innerHTML = guestShell(`<div class="onboard-card"><div class="onboard-emoji">⏳</div><h2 class="mt-2">กำลังโหลด...</h2></div>`); done(); return; }
+  if (state.view === 'needs-config') { app.innerHTML = guestShell(needsConfigHtml()); done(); return; }
+  if (state.view === 'auth') { app.innerHTML = guestShell(authHtml()); done(); return; }
+  if (state.view === 'setup-profile') { app.innerHTML = guestShell(setupProfileHtml()); done(); return; }
+  if (state.view === 'pending') { app.innerHTML = guestShell(pendingHtml()); done(); return; }
+  if (state.view === 'suspended') { app.innerHTML = guestShell(suspendedHtml()); done(); return; }
+
+  let body = '';
+  if (state.tab === 'orders') body = renderOrdersTab();
+  else if (state.tab === 'menu') body = renderMenuTab();
+  else if (state.tab === 'analytics') body = renderAnalyticsTab();
+  else body = renderSettingsTab();
+
+  app.innerHTML = `
+    ${headerHtml()}
+    <main class="max-w-4xl w-full mx-auto p-3 sm:p-6 pb-24 sm:pb-24">${body}</main>
+    ${navHtml()}
+  `;
+  if (state.tab === 'menu') applyMenuFilters();
+  if (state.tab === 'analytics') drawSalesChart();
+  refreshOverlay();
+  done();
+}
+
+init();
+</script>
+</body>
+</html>
