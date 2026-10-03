@@ -472,10 +472,11 @@ async function toggleOpen(){
   S.shop.is_open = val; render();
   toast(val ? '🟢 เปิดร้านแล้ว ลูกค้าเห็นเมนูที่โพสต์ไว้' : '🔴 ปิดร้านชั่วคราว ลูกค้าจะไม่เห็นร้าน');
 }
+// ที่อยู่เว็บของแอปลูกค้า (GitHub Pages)
+const CUSTOMER_APP_URL = 'https://kohlarngo.github.io/kohlarngo-delivery/delivery/index.html';
 function customerAppLink(){
   // แอปลูกค้า (index.html) วางไว้โฟลเดอร์เดียวกับไฟล์นี้ — ลิงก์เปิดหน้าร้านโดยตรง
-  try { const u = new URL('index.html', location.href); u.search = '?shop=' + S.shop.id; return u.toString(); }
-  catch (e) { return 'index.html?shop=' + S.shop.id; }
+  return CUSTOMER_APP_URL + '?shop=' + S.shop.id;
 }
 
 /* ---------------- orders ---------------- */
@@ -819,6 +820,7 @@ function cutoffParts(ts){
   return { date: isoDate(bkk), time: pad2(bkk.getHours()) + ':' + pad2(bkk.getMinutes()) };
 }
 function cutoffText(ts){ const p = cutoffParts(ts); return `${dayLabel(p.date).main} ${p.time} น.`; }
+function thaiDate(iso){ const [y, m, d] = iso.split('-').map(Number); return `${d}/${m}/${y + 543}`; }
 function openDayEditor(id){
   const s = S.shop;
   const day = id ? S.days.find(x => x.id === id) : null;
@@ -914,13 +916,13 @@ function postText(day){
     `📣 เมนู${l.main}${l.sub ? ` (${l.sub})` : ''} — ${s.name}`,
     `จองวันนี้ อิ่มพรุ่งนี้ 🍱`,
     '',
-    ...items.map(m => `- ${m.name} ${m.is_custom_request ? `(ฝากซื้อ ราคาตามจริง${Number(m.service_fee) ? ` + ค่าบริการ ${Number(m.service_fee)}/ชุด` : ''})` : (m.bigPrice ? `${Number(m.price)}/${m.bigPrice}` : Number(m.price))}`),
+    ...items.map(m => `- ${m.name} ${m.is_custom_request ? `(ฝากซื้อ ราคาตามจริง${Number(m.service_fee) ? ` + ค่าบริการ ${Number(m.service_fee)}/ชุด` : ''})` : (m.bigPrice ? `${Number(m.price)}พิเศษ${m.bigPrice}` : Number(m.price))}`),
     '',
     `🕖 ${day.pickup_enabled && day.delivery_enabled ? 'รับ/ส่ง' : day.pickup_enabled ? 'รับอาหาร' : 'ส่ง'} ${day.time_from} - ${day.time_to} น.`,
     day.pickup_enabled ? `🏠 รับเองที่ร้าน${s.pickup_location ? ': ' + s.pickup_location : ''}` : null,
     day.delivery_enabled ? (zones.length ? `🛵 ส่ง: ${zones.map(z => `${z.name} ขั้นต่ำ ${z.min || 0}${Number(z.fee) ? ` (ค่าส่ง ${z.fee})` : ''}`).join(' / ')}` : `🛵 มีบริการส่ง${Number(s.preorder_delivery_fee) ? ` ค่าส่ง ${s.preorder_delivery_fee}` : ''}`) : '🚫 ยังไม่มีบริการส่ง',
     day.note ? `📝 ${day.note}` : null,
-    `⏰ ปิดรับจอง ${cutoffText(day.cutoff_at)}`,
+    `⏰ ปิดรับจอง ${cutoffText(day.cutoff_at)}(${thaiDate(cutoffParts(day.cutoff_at).date)})`,
     s.phone ? `📞 ${s.phone}` : null,
     '',
     `👉 กดจองเลย: ${customerAppLink()}`,
